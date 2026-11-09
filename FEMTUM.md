@@ -12,6 +12,16 @@ on Femtum's own infrastructure, alongside upstream's unmodified source.
   from `develop`. The current one is **`Femtum-2.82.0`**, cut from
   `v2.82.0` (`02bd74fde`). All of Femtum's deployment work lives on a
   `Femtum-<tag>` branch.
+- **The repository's default branch is set to the current `Femtum-<tag>`
+  branch**, not `develop` — currently `Femtum-2.82.0`. This is deliberate:
+  it's where the work actually is, and it's what a clone, a new PR's base,
+  and `workflow_dispatch` all land on by default. It has one consequence
+  worth knowing: GitHub runs **scheduled (`cron`) workflows against the
+  default branch**, regardless of any branch filter on their other
+  triggers. So `schedule.yml` and `codeql-analysis.yml`'s weekly cron now
+  run against `Femtum-2.82.0` itself, not `develop` — one more reason
+  they're in the disabled list below, and a case where "it only runs on
+  push to develop/master" reasoning alone would have been wrong.
 
 ## The add-only rule
 
@@ -46,10 +56,17 @@ stop and raise it rather than breaking the add-only rule.
 3. Because Femtum commits are add-only, the rebase should be conflict-free —
    there is nothing upstream to have diverged from.
 4. **Re-check the disabled-workflow list below** (see "Upstream workflows
-   disabled in the fork").
-5. Once the new branch is verified, it becomes the one that may run
-   `terraform plan`/`apply` (see next section). Retire plan/apply access on
-   the old `Femtum-*` branch.
+   disabled in the fork") — remember that cron-scheduled workflows run
+   against whatever the default branch is, not just push/PR branch
+   filters.
+5. **Repoint the repository's default branch** to the new `Femtum-<tag>`
+   branch (repo Settings → Branches on GitHub). Skipping this leaves
+   clones, new PRs' default base, `workflow_dispatch` runs and any
+   cron-scheduled workflow pointed at the *old* branch even after the new
+   one is otherwise ready.
+6. Once the new branch is verified and is the default, it becomes the one
+   that may run `terraform plan`/`apply` (see next section). Retire
+   plan/apply access on the old `Femtum-*` branch.
 
 ## Only the newest `Femtum-*` branch may run Terraform against `cvat-rnd`
 
