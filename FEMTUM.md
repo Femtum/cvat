@@ -134,11 +134,12 @@ that auto-triggers.
 - **`FEMTUM.md`** (this file) and the one-line `README.md` pointer — present.
 - **`.github/workflows/femtum-infra.yml`** — present. Femtum-owned CI that
   runs `terraform fmt -check` and `terraform test` against `infra/`.
-- **`infra/`** — not yet present. Will hold the Terraform root for Femtum's
-  infrastructure on the `cvat-rnd` Terraform Cloud workspace: the `cvat-database`
-  RDS instance, its security group, the IAM role External Secrets Operator
-  assumes to read its secret, and the matching `infra/tests/*.tftest.hcl`
-  suite. See the `cvat-rds-root` task.
+- **`infra/`** — present. The Terraform root for Femtum's infrastructure on
+  the `cvat-rnd` Terraform Cloud workspace, with its `infra/tests/*.tftest.hcl`
+  suite. It holds `cvat_data`, the EFS file system behind the backend's shared
+  `ReadWriteMany` volume (see `infra/README.md`). Still to come: the
+  `cvat-database` RDS instance, its security group, and the IAM role External
+  Secrets Operator assumes to read its secret. See the `cvat-rds-root` task.
 - **`deploy/`** — not yet present. Will hold the Kubernetes-facing deployment
   assets: the Helm values override for the `cvat` chart (wiring it to the
   external RDS instance instead of the bundled Postgres), the `SecretStore`
