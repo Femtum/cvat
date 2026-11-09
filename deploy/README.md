@@ -15,7 +15,7 @@ Before installing CVAT, two pods on two nodes mount the access point: one writes
 
 ```sh
 kubectl create namespace rwx-proof
-sed "s|VOLUME_HANDLE|$volume_handle|" deploy/rwx-proof.yaml | kubectl apply -f -
+sed "s|VOLUME_HANDLE|${volume_handle:?read it from terraform first}|" deploy/rwx-proof.yaml | kubectl apply -f -
 kubectl wait -n rwx-proof --for=condition=Ready pod --all --timeout=10m
 kubectl exec -n rwx-proof rwx-proof-reader -- cat /data/rwx-proof   # the writer's pod name
 kubectl get pods -n rwx-proof -o wide                                # two different nodes
@@ -26,7 +26,7 @@ kubectl delete namespace rwx-proof && kubectl delete pv rwx-proof
 ## Install
 
 ```sh
-sed "s|VOLUME_HANDLE|$volume_handle|" deploy/backend-data.pv.yaml | kubectl apply -f -
+sed "s|VOLUME_HANDLE|${volume_handle:?read it from terraform first}|" deploy/backend-data.pv.yaml | kubectl apply -f -
 helm upgrade --install cvat helm-chart --namespace cvat --create-namespace \
   -f helm-chart/cvat.values.yaml -f deploy/cvat.values.yaml
 kubectl get pvc -n cvat cvat-backend-data   # Bound to cvat-backend-data
