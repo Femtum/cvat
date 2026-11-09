@@ -45,6 +45,8 @@ terraform apply
 
 ## Tests
 
+CI only checks formatting: it cannot download `platform_contract` from the private `Femtum/Infrastructure`. Run the suite before pushing:
+
 ```sh
 cd infra
 terraform init -backend=false && terraform test

@@ -133,7 +133,9 @@ that auto-triggers.
 
 - **`FEMTUM.md`** (this file) and the one-line `README.md` pointer — present.
 - **`.github/workflows/femtum-infra.yml`** — present. Femtum-owned CI that
-  runs `terraform fmt -check` and `terraform test` against `infra/`.
+  runs `terraform fmt -check` against `infra/`. `terraform test` runs locally
+  only (see `infra/README.md`): it downloads `platform_contract` from the
+  private `Femtum/Infrastructure`, which the runners have no key for.
 - **`infra/`** — present. The Terraform root for Femtum's infrastructure on
   the `cvat-rnd` Terraform Cloud workspace, with its `infra/tests/*.tftest.hcl`
   suite. It holds `cvat_data`, the EFS file system behind the backend's shared
