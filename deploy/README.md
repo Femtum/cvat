@@ -11,7 +11,10 @@ volume_handle=$(terraform -chdir=infra output -raw backend_data_volume_handle)
 
 ## Install
 
+The chart's dependencies (PostgreSQL, Redis, Traefik, …) are downloaded into `helm-chart/charts/`, which git ignores along with `Chart.lock`. Run the update after every rebase onto a new upstream tag too.
+
 ```sh
+helm dependency update helm-chart
 sed "s|VOLUME_HANDLE|${volume_handle:?read it from terraform first}|" deploy/backend-data.pv.yaml | kubectl apply -f -
 helm upgrade --install cvat helm-chart --namespace cvat --create-namespace \
   -f helm-chart/cvat.values.yaml -f deploy/cvat.values.yaml
