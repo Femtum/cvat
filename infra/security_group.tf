@@ -9,7 +9,7 @@ resource "aws_security_group" "mount_targets" {
 
 resource "aws_vpc_security_group_ingress_rule" "nfs_from_cluster" {
   security_group_id = aws_security_group.mount_targets.id
-  description       = "NFS from the Kubernetes cluster's nodes and pods"
+  description       = "NFS from the Kubernetes cluster nodes and pods"
 
   referenced_security_group_id = module.platform.shared.kubernetes_cluster_security_group_id
   ip_protocol                  = "tcp"

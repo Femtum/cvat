@@ -67,6 +67,20 @@ run "given_the_cluster_when_applying_then_it_alone_reaches_nfs" {
   }
 }
 
+run "given_the_nfs_rules_when_applying_then_their_descriptions_only_use_characters_ec2_accepts" {
+  command = apply
+
+  assert {
+    condition     = aws_security_group.mount_targets.description == "NFS to cvat_data from the Kubernetes cluster only" && aws_vpc_security_group_ingress_rule.nfs_from_cluster.description == "NFS from the Kubernetes cluster nodes and pods"
+    error_message = "The descriptions must say what the group and its rule admit."
+  }
+
+  assert {
+    condition     = alltrue([for description in [aws_security_group.mount_targets.description, aws_vpc_security_group_ingress_rule.nfs_from_cluster.description] : can(regex("^[a-zA-Z0-9. _\\-:/()#,@\\[\\]+=&;{}!$*]{0,255}$", description))])
+    error_message = "EC2 refuses a description with any other character than a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*, an apostrophe included, and only at apply."
+  }
+}
+
 run "given_the_mount_targets_when_applying_then_no_network_reaches_them_and_0_0_0_0_0_never_does" {
   command = apply
 
