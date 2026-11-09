@@ -1,0 +1,64 @@
+# Femtum-owned workflow. Not part of upstream cvat-ai/cvat CI.
+#
+# Lints and tests Femtum's Terraform root (infra/), which is added on
+# Femtum-<tag> branches under the add-only rule described in FEMTUM.md.
+#
+# `infra/` does not exist yet as of this branch (it lands in a later task,
+# `cvat-rds-root`) — the `infra-exists` guard job below checks for the
+# directory first and skips the real work entirely when it is absent, so
+# this workflow is green (not failing, not erroring) both before and after
+# infra/ is created.
+name: Femtum - Infra (Terraform)
+
+on:
+  push:
+    branches:
+      - 'Femtum-*'
+  pull_request:
+    branches:
+      - 'Femtum-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  infra-exists:
+    name: Check infra/ exists
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -d infra ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "infra/ does not exist yet on this branch; nothing to check."
+          fi
+
+  terraform:
+    name: terraform fmt -check / terraform test
+    needs: infra-exists
+    if: needs.infra-exists.outputs.present == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        run: terraform init -backend=false
+
+      - name: terraform test
+        run: terraform test

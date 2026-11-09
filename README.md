@@ -1,3 +1,5 @@
+**This is Femtum's fork of CVAT — see [FEMTUM.md](FEMTUM.md) before making any change here.**
+
 [![CVAT Community header](site/content/en/images/cvat_github_header.webp)](https://app.cvat.ai)
 # CVAT: Computer Vision Annotation Tool
 
