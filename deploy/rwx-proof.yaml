@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: rwx-proof
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: rwx-proof
+  claimRef:
+    namespace: rwx-proof
+    name: rwx-proof
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: VOLUME_HANDLE
+    volumeAttributes:
+      encryptInTransit: "true"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rwx-proof
+  namespace: rwx-proof
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rwx-proof
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rwx-proof-writer
+  namespace: rwx-proof
+  labels:
+    app: rwx-proof
+spec:
+  containers:
+    - name: writer
+      image: public.ecr.aws/docker/library/busybox:1.37
+      command: ["sh", "-c", "hostname > /data/rwx-proof && sleep 3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: rwx-proof
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rwx-proof-reader
+  namespace: rwx-proof
+  labels:
+    app: rwx-proof
+spec:
+  # A second node proves the volume is shared across nodes, not just pods.
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app: rwx-proof
+          topologyKey: kubernetes.io/hostname
+  containers:
+    - name: reader
+      image: public.ecr.aws/docker/library/busybox:1.37
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: rwx-proof
