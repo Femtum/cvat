@@ -43,6 +43,10 @@ terraform plan
 terraform apply
 ```
 
+## Deploy on Kubernetes
+
+The chart, its values and the volume bound to `cvat_data` are in [`deploy/`](../deploy/README.md).
+
 ## Tests
 
 CI only checks formatting: it cannot download `platform_contract` from the private `Femtum/Infrastructure`. Run the suite before pushing:

@@ -1,0 +1,4 @@
+cvat:
+  backend:
+    defaultStorage:
+      storageClassName: cvat-efs

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: cvat-backend-data
+spec:
+  # EFS has no size. Kubernetes only binds a claim whose request fits in this.
+  capacity:
+    storage: 1Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: cvat-efs
+  claimRef:
+    namespace: cvat
+    name: cvat-backend-data
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: VOLUME_HANDLE
+    volumeAttributes:
+      encryptInTransit: "true"
