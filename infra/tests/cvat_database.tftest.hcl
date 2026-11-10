@@ -261,10 +261,10 @@ run "given_the_secrets_read_role_when_applying_then_it_reads_cvats_database_user
       Statement = [{
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-        Resource = ["arn:aws:secretsmanager:ca-central-1:111122223333:secret:rds/cvat_database_user-??????"]
+        Resource = ["arn:aws:secretsmanager:ca-central-1:111122223333:secret:rds/cvat_database_user-WozWrk"]
       }]
     }
-    error_message = "The role must only read rds/cvat_database_user by its exact name: a prefix such as rds/* reaches lit's database secrets."
+    error_message = "The role must only read rds/cvat_database_user by its exact ARN: a prefix such as rds/* reaches lit's database secrets."
   }
 }
 
