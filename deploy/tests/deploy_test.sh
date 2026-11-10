@@ -11,7 +11,8 @@ failures=0
 
 # Builds a directory of stub tools. Each appends its call to $CALLS; kubectl
 # also appends the manifest it is given on stdin. terraform answers from
-# $BACKEND_DATA_VOLUME_HANDLE and $TARGET_GROUP_ARN.
+# $BACKEND_DATA_VOLUME_HANDLE, $TARGET_GROUP_ARN, $URL, $DATABASE_ADDRESS and
+# $SECRETS_READ_ROLE_ARN.
 make_stubs() {
   local bin=$1
   mkdir -p "$bin"
@@ -32,6 +33,8 @@ case "${*: -1}" in
   backend_data_volume_handle) printf '%s' "$BACKEND_DATA_VOLUME_HANDLE" ;;
   target_group_arn) printf '%s' "$TARGET_GROUP_ARN" ;;
   url) printf '%s' "$URL" ;;
+  database_address) printf '%s' "$DATABASE_ADDRESS" ;;
+  secrets_read_role_arn) printf '%s' "$SECRETS_READ_ROLE_ARN" ;;
 esac
 EOF
   chmod +x "$bin"/*
@@ -55,6 +58,8 @@ test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_bindi
   export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
   export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
   export URL="https://cvat.rnd.intranet.femtum.com"
+  export DATABASE_ADDRESS="cvat-database.abcdefghijkl.ca-central-1.rds.amazonaws.com"
+  export SECRETS_READ_ROLE_ARN="arn:aws:iam::111122223333:role/external-secrets/cvat-secrets-read"
 
   # when
   local status=0
@@ -65,11 +70,18 @@ test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_bindi
   check "calls the tools in order with the rendered manifests" "terraform -chdir=$repo_root/infra output -raw backend_data_volume_handle
 terraform -chdir=$repo_root/infra output -raw target_group_arn
 terraform -chdir=$repo_root/infra output -raw url
+terraform -chdir=$repo_root/infra output -raw database_address
+terraform -chdir=$repo_root/infra output -raw secrets_read_role_arn
 aws eks update-kubeconfig --region ca-central-1 --name femtum-rnd
 helm dependency update $repo_root/helm-chart
+kubectl apply -f $repo_root/deploy/namespace.yaml
 kubectl apply -f -
 $(sed 's|VOLUME_HANDLE|fs-0123456789abcdef0::fsap-0123456789abcdef0|' "$repo_root/deploy/backend-data.pv.yaml")
-helm upgrade --install cvat $repo_root/helm-chart --namespace cvat --create-namespace -f $repo_root/helm-chart/cvat.values.yaml -f $repo_root/deploy/cvat.values.yaml --set-string ingress.hostname=cvat.rnd.intranet.femtum.com --set-string grafana.grafana\.ini.server.root_url=https://cvat.rnd.intranet.femtum.com/analytics --wait --timeout 15m
+kubectl apply -f -
+$(sed 's|SECRETS_READ_ROLE_ARN|arn:aws:iam::111122223333:role/external-secrets/cvat-secrets-read|' "$repo_root/deploy/secret-store.yaml")
+kubectl apply -f $repo_root/deploy/database-user.external-secret.yaml
+kubectl wait --for=condition=Ready externalsecret/cvat-database-user --namespace cvat --timeout 2m
+helm upgrade --install cvat $repo_root/helm-chart --namespace cvat -f $repo_root/helm-chart/cvat.values.yaml -f $repo_root/deploy/cvat.values.yaml --set-string ingress.hostname=cvat.rnd.intranet.femtum.com --set-string grafana.grafana\\.ini.server.root_url=https://cvat.rnd.intranet.femtum.com/analytics --set-string postgresql.external.host=cvat-database.abcdefghijkl.ca-central-1.rds.amazonaws.com --wait --wait-for-jobs --timeout 15m
 kubectl apply -f -
 $(sed 's|TARGET_GROUP_ARN|arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef|' "$repo_root/deploy/target-group-binding.yaml")" "$(cat "$CALLS")"
   rm -rf "$work"
@@ -82,6 +94,8 @@ test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_t
   export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
   export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
   export URL="https://cvat.rnd.intranet.femtum.com"
+  export DATABASE_ADDRESS="cvat-database.abcdefghijkl.ca-central-1.rds.amazonaws.com"
+  export SECRETS_READ_ROLE_ARN="arn:aws:iam::111122223333:role/external-secrets/cvat-secrets-read"
 
   # when
   (PATH="$work/bin:/usr/bin:/bin" "$script") >/dev/null 2>&1
@@ -89,7 +103,8 @@ test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_t
   # then
   check "the volume handle is applied" "    volumeHandle: fs-0123456789abcdef0::fsap-0123456789abcdef0" "$(grep 'volumeHandle:' "$CALLS")"
   check "the target group ARN is applied" "  targetGroupARN: arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef" "$(grep 'targetGroupARN:' "$CALLS")"
-  check "no placeholder is left" "" "$(grep -E 'VOLUME_HANDLE|TARGET_GROUP_ARN' "$CALLS")"
+  check "the secrets role is applied" "      role: arn:aws:iam::111122223333:role/external-secrets/cvat-secrets-read" "$(grep 'role:' "$CALLS")"
+  check "no placeholder is left" "" "$(grep -E 'VOLUME_HANDLE|TARGET_GROUP_ARN|SECRETS_READ_ROLE_ARN' "$CALLS")"
   rm -rf "$work"
 }
 
@@ -125,6 +140,46 @@ test_given_infra_without_a_url_when_deploying_then_it_stops_before_touching_the_
   # then
   check "fails" "1" "$status"
   check "says why" "deploy.sh: infra/ publishes no url: apply infra/ first" "$output"
+  check "never calls aws, helm or kubectl" "" "$(grep -E '^(aws|helm|kubectl) ' "$CALLS")"
+  rm -rf "$work"
+}
+
+test_given_infra_without_a_database_address_when_deploying_then_it_stops_before_touching_the_cluster() {
+  # given
+  local work; work=$(mktemp -d)
+  make_stubs "$work/bin"
+  export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
+  export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
+  export URL="https://cvat.rnd.intranet.femtum.com" DATABASE_ADDRESS=""
+  export SECRETS_READ_ROLE_ARN="arn:aws:iam::111122223333:role/external-secrets/cvat-secrets-read"
+
+  # when
+  local status=0 output
+  output=$(PATH="$work/bin:/usr/bin:/bin" "$script" 2>&1) || status=$?
+
+  # then
+  check "fails" "1" "$status"
+  check "says why" "deploy.sh: infra/ publishes no database_address: apply infra/ first" "$output"
+  check "never calls aws, helm or kubectl" "" "$(grep -E '^(aws|helm|kubectl) ' "$CALLS")"
+  rm -rf "$work"
+}
+
+test_given_infra_without_a_secrets_role_when_deploying_then_it_stops_before_touching_the_cluster() {
+  # given
+  local work; work=$(mktemp -d)
+  make_stubs "$work/bin"
+  export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
+  export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
+  export URL="https://cvat.rnd.intranet.femtum.com"
+  export DATABASE_ADDRESS="cvat-database.abcdefghijkl.ca-central-1.rds.amazonaws.com" SECRETS_READ_ROLE_ARN=""
+
+  # when
+  local status=0 output
+  output=$(PATH="$work/bin:/usr/bin:/bin" "$script" 2>&1) || status=$?
+
+  # then
+  check "fails" "1" "$status"
+  check "says why" "deploy.sh: infra/ publishes no secrets_read_role_arn: apply infra/ first" "$output"
   check "never calls aws, helm or kubectl" "" "$(grep -E '^(aws|helm|kubectl) ' "$CALLS")"
   rm -rf "$work"
 }
@@ -169,6 +224,8 @@ test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_bindi
 test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_the_arn
 test_given_infra_not_applied_when_deploying_then_it_stops_before_touching_the_cluster
 test_given_infra_without_a_url_when_deploying_then_it_stops_before_touching_the_cluster
+test_given_infra_without_a_database_address_when_deploying_then_it_stops_before_touching_the_cluster
+test_given_infra_without_a_secrets_role_when_deploying_then_it_stops_before_touching_the_cluster
 test_given_helm_missing_when_deploying_then_it_stops_before_reading_anything
 test_given_an_argument_when_deploying_then_it_is_refused
 
