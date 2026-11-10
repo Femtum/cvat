@@ -14,12 +14,15 @@ override_module {
   outputs = {
     shared = {
       vpc_id                               = "vpc-0123456789abcdef0"
+      private_subnet_ids                   = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+      client_vpn_security_group_id         = "sg-0000000000000000c"
       https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
       intranet_domain                      = "rnd.intranet.femtum.com"
       reserved_rule_priorities             = [50000]
       kubernetes_cluster_name              = "femtum-rnd"
       kubernetes_cluster_security_group_id = "sg-0000000000000000e"
       kubernetes_subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+      eso_controller_role_arn              = "arn:aws:iam::111122223333:role/femtum-rnd-external-secrets"
     }
   }
 }
@@ -218,15 +221,24 @@ run "given_a_platform_without_a_kubernetes_cluster_when_planning_then_the_plan_i
     outputs = {
       shared = {
         vpc_id                               = "vpc-0123456789abcdef0"
+        private_subnet_ids                   = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+        client_vpn_security_group_id         = "sg-0000000000000000c"
         https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
         intranet_domain                      = "rnd.intranet.femtum.com"
         reserved_rule_priorities             = [50000]
         kubernetes_cluster_name              = null
         kubernetes_cluster_security_group_id = null
         kubernetes_subnet_ids                = null
+        eso_controller_role_arn              = null
       }
     }
   }
 
-  expect_failures = [aws_vpc_security_group_ingress_rule.nfs_from_cluster]
+  # Without a cluster there is no cluster group for Postgres either, and no
+  # External Secrets controller to trust: cvat_database.tftest.hcl checks each.
+  expect_failures = [
+    aws_vpc_security_group_ingress_rule.nfs_from_cluster,
+    aws_vpc_security_group_ingress_rule.postgres,
+    aws_iam_role.secrets_read,
+  ]
 }
