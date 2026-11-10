@@ -1,0 +1,12 @@
+apiVersion: eks.amazonaws.com/v1
+kind: TargetGroupBinding
+metadata:
+  name: cvat
+  namespace: cvat
+spec:
+  serviceRef:
+    name: cvat-traefik
+    port: web
+  targetGroupARN: TARGET_GROUP_ARN
+  targetType: ip
+  multiClusterTargetGroup: true
