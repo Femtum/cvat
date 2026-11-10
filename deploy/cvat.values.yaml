@@ -1,7 +1,64 @@
+# EKS Auto Mode sizes nodes from requests alone: upstream requests nothing, so
+# every pod lands on one c6a.large, which runs out of memory and goes NotReady.
+# Requests are each pod's usage at rest; imports and exports burst above them.
 cvat:
   backend:
     defaultStorage:
       storageClassName: cvat-efs
+    initializer:
+      resources:
+        requests: {cpu: 100m, memory: 512Mi}
+    server:
+      resources:
+        requests: {cpu: 250m, memory: 1Gi}
+    worker:
+      export:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      import:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      annotation:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      webhooks:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      qualityreports:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      chunks:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      consensus:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+      utils:
+        resources:
+          requests: {cpu: 50m, memory: 384Mi}
+  frontend:
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+  opa:
+    resources:
+      requests: {cpu: 10m, memory: 64Mi}
+  kvrocks:
+    resources:
+      requests: {cpu: 50m, memory: 256Mi}
+
+clickhouse:
+  # Without a limit, ClickHouse sizes its caches from the node's whole memory.
+  resources:
+    requests: {cpu: 100m, memory: 1Gi}
+    limits: {memory: 2Gi}
+
+grafana:
+  resources:
+    requests: {cpu: 25m, memory: 128Mi}
+
+vector:
+  resources:
+    requests: {cpu: 25m, memory: 128Mi}
 
 # The shared ALB terminates TLS with the platform's wildcard certificate and
 # forwards plain HTTP to Traefik, which splits it by path.
@@ -9,6 +66,8 @@ ingress:
   hostname: cvat.rnd.intranet.femtum.com
 
 traefik:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
   # Reached only through the shared ALB's target group, bound in
   # target-group-binding.yaml. A LoadBalancer Service would get its own NLB.
   service:
