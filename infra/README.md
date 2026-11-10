@@ -11,7 +11,7 @@ The `platform_contract` and `app_ingress` modules come from `Femtum/Infrastructu
 - Encrypted at rest with the AWS-managed key. The file system policy refuses any request without TLS, and only grants mounting through a mount target, never as root.
 - NFS (2049) admitted from the cluster's security group only, never from a network.
 - Every mount goes through the access point: files are written as CVAT's `django` user (`1000:1000`) under `/cvat_data`, mode `0750`.
-- Standard storage only: chunks are read back at random, and Infrequent Access bills every read.
+- Files untouched for 30 days move to Infrequent Access ($0.02 per GB-month against Standard's $0.33, plus $0.011 per GB read), and back to Standard on their first read. Reopening an old task costs a few cents and slows its first frames only.
 - Backed up every night by AWS Backup into the `cvat-<environment>` vault, kept 35 days.
 
 `prevent_destroy` makes Terraform refuse any plan that deletes the file system, and AWS refuses to delete the vault while it holds recovery points. `terraform test` cannot check `prevent_destroy`: keep it when editing `file_system.tf`.
