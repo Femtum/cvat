@@ -4,7 +4,8 @@
 set -euo pipefail
 
 # backend-data.pv.yaml reserves its volume for cvat/cvat-backend-data, and
-# target-group-binding.yaml lives in namespace cvat: both follow this release.
+# namespace.yaml, secret-store.yaml, database-user.external-secret.yaml and
+# target-group-binding.yaml live in namespace cvat: all follow this release.
 readonly release=cvat
 readonly namespace=cvat
 readonly cluster=femtum-rnd
@@ -42,24 +43,34 @@ main() {
   [[ $# -eq 0 ]] || fail "takes no arguments"
   require_tools aws terraform helm kubectl
 
-  local volume_handle target_group_arn url
+  local volume_handle target_group_arn url database_address secrets_read_role_arn
   volume_handle=$(infra_output backend_data_volume_handle)
   target_group_arn=$(infra_output target_group_arn)
   url=$(infra_output url)
+  database_address=$(infra_output database_address)
+  secrets_read_role_arn=$(infra_output secrets_read_role_arn)
 
   aws eks update-kubeconfig --region "$region" --name "$cluster"
   helm dependency update "$repo_root/helm-chart"
+  kubectl apply -f "$repo_root/deploy/namespace.yaml"
   apply_manifest backend-data.pv.yaml VOLUME_HANDLE "$volume_handle"
+  # The initializer and every backend pod read the database user from this
+  # Secret: sync it before the release starts them.
+  apply_manifest secret-store.yaml SECRETS_READ_ROLE_ARN "$secrets_read_role_arn"
+  kubectl apply -f "$repo_root/deploy/database-user.external-secret.yaml"
+  kubectl wait --for=condition=Ready externalsecret/cvat-database-user --namespace "$namespace" --timeout 2m
   # The shared ALB terminates TLS for the host infra/ registered on it and
   # forwards plain HTTP to Traefik, which splits it by path. Grafana builds
-  # its links and redirects from its own root URL.
+  # its links and redirects from its own root URL. --wait-for-jobs holds the
+  # release until the initializer has run CVAT's migrations.
   helm upgrade --install "$release" "$repo_root/helm-chart" \
-    --namespace "$namespace" --create-namespace \
+    --namespace "$namespace" \
     -f "$repo_root/helm-chart/cvat.values.yaml" \
     -f "$repo_root/deploy/cvat.values.yaml" \
     --set-string "ingress.hostname=${url#https://}" \
     --set-string "grafana.grafana\.ini.server.root_url=$url/analytics" \
-    --wait --timeout 15m
+    --set-string "postgresql.external.host=$database_address" \
+    --wait --wait-for-jobs --timeout 15m
   apply_manifest target-group-binding.yaml TARGET_GROUP_ARN "$target_group_arn"
 }
 

@@ -3,6 +3,11 @@
 # Requests are each pod's usage at rest; imports and exports burst above them.
 cvat:
   backend:
+    # rds.force_ssl refuses plain connections; libpq's default, prefer, would
+    # fall back to plain text against a server that allowed it.
+    additionalEnv:
+      - name: PGSSLMODE
+        value: require
     defaultStorage:
       storageClassName: cvat-efs
     # The access point writes every file on cvat_data as CVAT's user, so the
@@ -91,3 +96,14 @@ traefik:
       enabled: true
       entryPoints:
         - web
+
+# CVAT's database is cvat-database on RDS (infra/). deploy.sh sets
+# postgresql.external.host from infra/'s database_address. The password comes
+# only from the Secret, as CVAT_POSTGRES_PASSWORD: never also set
+# CVAT_POSTGRES_PASSWORD_FILE, CVAT refuses to start with both.
+postgresql:
+  enabled: false
+  secret:
+    create: false
+    # Synced from Secrets Manager by database-user.external-secret.yaml.
+    name: cvat-database-user
