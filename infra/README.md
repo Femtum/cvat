@@ -1,8 +1,8 @@
 # CVAT infrastructure
 
-What CVAT owns on the platform: `cvat_data`, the EFS file system its server and workers share (`<release>-backend-data`, `ReadWriteMany`), with its mount targets, NFS security group, access point and backups. The platform ([Femtum/Infrastructure](https://github.com/Femtum/Infrastructure), `infrastructure-aws`) runs the Kubernetes cluster and its EFS CSI driver, and knows nothing about this app.
+What CVAT owns on the platform: `cvat_data`, the EFS file system its server and workers share (`<release>-backend-data`, `ReadWriteMany`), with its mount targets, NFS security group, access point and backups; and `cvat.<env>.intranet.femtum.com` on the shared HTTPS listener, at priority `30`, forwarding to the target group Traefik's pods are bound to (`/ping` health check). The platform ([Femtum/Infrastructure](https://github.com/Femtum/Infrastructure), `infrastructure-aws`) runs the Kubernetes cluster and its EFS CSI driver, and knows nothing about this app.
 
-The `platform_contract` module comes from `Femtum/Infrastructure` over SSH, pinned to a commit in `platform.tf`. Downloading it needs read access to that repository: your own GitHub SSH key locally, the workspace's SSH key in Terraform Cloud. It reads the platform workspace's outputs through `terraform_remote_state`, and the plan is refused while the platform runs no Kubernetes cluster.
+The `platform_contract` and `app_ingress` modules come from `Femtum/Infrastructure` over SSH, pinned to one commit in `platform.tf`. Downloading them needs read access to that repository: your own GitHub SSH key locally, the workspace's SSH key in Terraform Cloud. It reads the platform workspace's outputs through `terraform_remote_state`, and the plan is refused while the platform runs no Kubernetes cluster.
 
 ## cvat_data
 
@@ -23,7 +23,7 @@ The `platform_contract` module comes from `Femtum/Infrastructure` over SSH, pinn
 - Project `RnD`: `tfc-role` only trusts workspaces in that project, any other gets `AccessDenied` on `sts:AssumeRoleWithWebIdentity`
 - Terraform 1.10 or later
 - No working directory: only this folder is uploaded
-- SSH key with read access to `Femtum/Infrastructure`, for the module source
+- SSH key with read access to `Femtum/Infrastructure`, for the module sources
 - Variable set `AWS OIDC RnD`: the platform's dynamic credentials and `environment_name = rnd`
 - Listed in `infrastructure-aws-rnd`'s remote state sharing (Settings → General), so `platform_contract` can read the platform's outputs
 
@@ -34,7 +34,7 @@ The `platform_contract` module comes from `Femtum/Infrastructure` over SSH, pinn
 Manual for now: no pipeline runs Terraform. You run `terraform plan` and `terraform apply` from your machine, in this folder, on the newest `Femtum-*` branch only: an older one silently reverts what the newer one applied (see [FEMTUM.md](../FEMTUM.md)). The run executes in Terraform Cloud, workspace `cvat-rnd`, which gets its AWS credentials through `tfc-role`. You need:
 
 - Terraform Cloud: `terraform login`, with an account allowed to plan and apply on `cvat-rnd` (organization `Femtum`, project `RnD`).
-- GitHub: an SSH key with read access to `Femtum/Infrastructure`, for `terraform init` to download the module.
+- GitHub: an SSH key with read access to `Femtum/Infrastructure`, for `terraform init` to download the modules.
 
 ```sh
 cd infra
@@ -45,7 +45,7 @@ terraform apply
 
 ## Deploy on Kubernetes
 
-The chart, its values and the volume bound to `cvat_data` are in [`deploy/`](../deploy/README.md).
+The chart, its values, the volume bound to `cvat_data` and the binding to the target group are in [`deploy/`](../deploy/README.md).
 
 ## Tests
 

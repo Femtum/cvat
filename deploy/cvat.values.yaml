@@ -2,3 +2,29 @@ cvat:
   backend:
     defaultStorage:
       storageClassName: cvat-efs
+
+# The shared ALB terminates TLS with the platform's wildcard certificate and
+# forwards plain HTTP to Traefik, which splits it by path.
+ingress:
+  hostname: cvat.rnd.intranet.femtum.com
+
+traefik:
+  # Reached only through the shared ALB's target group, bound in
+  # target-group-binding.yaml. A LoadBalancer Service would get its own NLB.
+  service:
+    type: ClusterIP
+  ports:
+    web:
+      # The ALB's addresses, inside the platform VPC (10.0.0.0/16): without
+      # this, Traefik rewrites X-Forwarded-Proto to http and Django answers
+      # HTTPS requests as plain HTTP.
+      forwardedHeaders:
+        trustedIPs:
+          - 10.0.0.0/16
+  # The ALB health-checks each pod with its IP as host, which no CVAT route
+  # matches.
+  ingressRoute:
+    healthcheck:
+      enabled: true
+      entryPoints:
+        - web

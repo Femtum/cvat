@@ -144,8 +144,9 @@ that auto-triggers.
   Secrets Operator assumes to read its secret. See the `cvat-rds-root` task.
 - **`deploy/`** — present. The Kubernetes-facing deployment assets and how to
   apply them (see `deploy/README.md`): the Helm values override for the `cvat`
-  chart and the static `PersistentVolume` binding the backend's shared data to
-  `cvat_data`. Still to come: wiring the chart to the external RDS instance
+  chart, the static `PersistentVolume` binding the backend's shared data to
+  `cvat_data`, and the `TargetGroupBinding` putting Traefik behind the
+  platform's shared ALB at `cvat.rnd.intranet.femtum.com`. Still to come: wiring the chart to the external RDS instance
   instead of the bundled Postgres, the `SecretStore` and `ExternalSecret`
   manifests that surface the database credentials from AWS Secrets Manager,
   and the SSO settings overlay. See the `cvat-deploy-values` task.

@@ -14,6 +14,10 @@ override_module {
   outputs = {
     shared = {
       vpc_id                               = "vpc-0123456789abcdef0"
+      https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
+      intranet_domain                      = "rnd.intranet.femtum.com"
+      reserved_rule_priorities             = [50000]
+      kubernetes_cluster_name              = "femtum-rnd"
       kubernetes_cluster_security_group_id = "sg-0000000000000000e"
       kubernetes_subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
     }
@@ -25,6 +29,13 @@ override_resource {
   values = {
     id  = "fs-0123456789abcdef0"
     arn = "arn:aws:elasticfilesystem:ca-central-1:111122223333:file-system/fs-0123456789abcdef0"
+  }
+}
+
+override_resource {
+  target = module.ingress.aws_lb_target_group.http
+  values = {
+    arn = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
   }
 }
 
@@ -207,6 +218,10 @@ run "given_a_platform_without_a_kubernetes_cluster_when_planning_then_the_plan_i
     outputs = {
       shared = {
         vpc_id                               = "vpc-0123456789abcdef0"
+        https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
+        intranet_domain                      = "rnd.intranet.femtum.com"
+        reserved_rule_priorities             = [50000]
+        kubernetes_cluster_name              = null
         kubernetes_cluster_security_group_id = null
         kubernetes_subnet_ids                = null
       }
