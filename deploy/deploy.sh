@@ -42,17 +42,23 @@ main() {
   [[ $# -eq 0 ]] || fail "takes no arguments"
   require_tools aws terraform helm kubectl
 
-  local volume_handle target_group_arn
+  local volume_handle target_group_arn url
   volume_handle=$(infra_output backend_data_volume_handle)
   target_group_arn=$(infra_output target_group_arn)
+  url=$(infra_output url)
 
   aws eks update-kubeconfig --region "$region" --name "$cluster"
   helm dependency update "$repo_root/helm-chart"
   apply_manifest backend-data.pv.yaml VOLUME_HANDLE "$volume_handle"
+  # The shared ALB terminates TLS for the host infra/ registered on it and
+  # forwards plain HTTP to Traefik, which splits it by path. Grafana builds
+  # its links and redirects from its own root URL.
   helm upgrade --install "$release" "$repo_root/helm-chart" \
     --namespace "$namespace" --create-namespace \
     -f "$repo_root/helm-chart/cvat.values.yaml" \
     -f "$repo_root/deploy/cvat.values.yaml" \
+    --set-string "ingress.hostname=${url#https://}" \
+    --set-string "grafana.grafana\.ini.server.root_url=$url/analytics" \
     --wait --timeout 15m
   apply_manifest target-group-binding.yaml TARGET_GROUP_ARN "$target_group_arn"
 }

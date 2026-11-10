@@ -31,6 +31,7 @@ echo "terraform $*" >> "$CALLS"
 case "${*: -1}" in
   backend_data_volume_handle) printf '%s' "$BACKEND_DATA_VOLUME_HANDLE" ;;
   target_group_arn) printf '%s' "$TARGET_GROUP_ARN" ;;
+  url) printf '%s' "$URL" ;;
 esac
 EOF
   chmod +x "$bin"/*
@@ -53,6 +54,7 @@ test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_bindi
   make_stubs "$work/bin"
   export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
   export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
+  export URL="https://cvat.rnd.intranet.femtum.com"
 
   # when
   local status=0
@@ -62,11 +64,12 @@ test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_bindi
   check "deploys successfully" "0" "$status"
   check "calls the tools in order with the rendered manifests" "terraform -chdir=$repo_root/infra output -raw backend_data_volume_handle
 terraform -chdir=$repo_root/infra output -raw target_group_arn
+terraform -chdir=$repo_root/infra output -raw url
 aws eks update-kubeconfig --region ca-central-1 --name femtum-rnd
 helm dependency update $repo_root/helm-chart
 kubectl apply -f -
 $(sed 's|VOLUME_HANDLE|fs-0123456789abcdef0::fsap-0123456789abcdef0|' "$repo_root/deploy/backend-data.pv.yaml")
-helm upgrade --install cvat $repo_root/helm-chart --namespace cvat --create-namespace -f $repo_root/helm-chart/cvat.values.yaml -f $repo_root/deploy/cvat.values.yaml --wait --timeout 15m
+helm upgrade --install cvat $repo_root/helm-chart --namespace cvat --create-namespace -f $repo_root/helm-chart/cvat.values.yaml -f $repo_root/deploy/cvat.values.yaml --set-string ingress.hostname=cvat.rnd.intranet.femtum.com --set-string grafana.grafana\.ini.server.root_url=https://cvat.rnd.intranet.femtum.com/analytics --wait --timeout 15m
 kubectl apply -f -
 $(sed 's|TARGET_GROUP_ARN|arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef|' "$repo_root/deploy/target-group-binding.yaml")" "$(cat "$CALLS")"
   rm -rf "$work"
@@ -78,6 +81,7 @@ test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_t
   make_stubs "$work/bin"
   export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
   export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
+  export URL="https://cvat.rnd.intranet.femtum.com"
 
   # when
   (PATH="$work/bin:/usr/bin:/bin" "$script") >/dev/null 2>&1
@@ -93,7 +97,7 @@ test_given_infra_not_applied_when_deploying_then_it_stops_before_touching_the_cl
   # given
   local work; work=$(mktemp -d)
   make_stubs "$work/bin"
-  export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="" TARGET_GROUP_ARN=""
+  export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="" TARGET_GROUP_ARN="" URL=""
 
   # when
   local status=0 output
@@ -102,6 +106,25 @@ test_given_infra_not_applied_when_deploying_then_it_stops_before_touching_the_cl
   # then
   check "fails" "1" "$status"
   check "says why" "deploy.sh: infra/ publishes no backend_data_volume_handle: apply infra/ first" "$output"
+  check "never calls aws, helm or kubectl" "" "$(grep -E '^(aws|helm|kubectl) ' "$CALLS")"
+  rm -rf "$work"
+}
+
+test_given_infra_without_a_url_when_deploying_then_it_stops_before_touching_the_cluster() {
+  # given
+  local work; work=$(mktemp -d)
+  make_stubs "$work/bin"
+  export CALLS="$work/calls" BACKEND_DATA_VOLUME_HANDLE="fs-0123456789abcdef0::fsap-0123456789abcdef0"
+  export TARGET_GROUP_ARN="arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
+  export URL=""
+
+  # when
+  local status=0 output
+  output=$(PATH="$work/bin:/usr/bin:/bin" "$script" 2>&1) || status=$?
+
+  # then
+  check "fails" "1" "$status"
+  check "says why" "deploy.sh: infra/ publishes no url: apply infra/ first" "$output"
   check "never calls aws, helm or kubectl" "" "$(grep -E '^(aws|helm|kubectl) ' "$CALLS")"
   rm -rf "$work"
 }
@@ -145,6 +168,7 @@ test_given_an_argument_when_deploying_then_it_is_refused() {
 test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_binding_are_applied_in_order
 test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_the_arn
 test_given_infra_not_applied_when_deploying_then_it_stops_before_touching_the_cluster
+test_given_infra_without_a_url_when_deploying_then_it_stops_before_touching_the_cluster
 test_given_helm_missing_when_deploying_then_it_stops_before_reading_anything
 test_given_an_argument_when_deploying_then_it_is_refused
 

@@ -5,6 +5,15 @@ cvat:
   backend:
     defaultStorage:
       storageClassName: cvat-efs
+    # The access point writes every file on cvat_data as CVAT's user, so the
+    # recursive chmod has nothing to fix. It would also slow every pod start
+    # as cvat_data grows, and it requests the server's resources whatever
+    # pod it runs in.
+    permissionFix:
+      enabled: false
+    # The ALB and then Traefik each append to X-Forwarded-For: with one hop,
+    # Django takes the ALB's address for every user's.
+    numProxies: 2
     initializer:
       resources:
         requests: {cpu: 100m, memory: 512Mi}
@@ -59,11 +68,6 @@ grafana:
 vector:
   resources:
     requests: {cpu: 25m, memory: 128Mi}
-
-# The shared ALB terminates TLS with the platform's wildcard certificate and
-# forwards plain HTTP to Traefik, which splits it by path.
-ingress:
-  hostname: cvat.rnd.intranet.femtum.com
 
 traefik:
   resources:

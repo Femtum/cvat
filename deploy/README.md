@@ -11,7 +11,7 @@ deploy/deploy.sh
 kubectl get pvc -n cvat cvat-backend-data   # Bound to cvat-backend-data
 ```
 
-The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle` and `target_group_arn` from `infra/`, and stops before touching the cluster if either is empty. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (PostgreSQL, Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the static volume, runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods, and finally applies the TargetGroupBinding. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
+The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle`, `target_group_arn` and `url` from `infra/`, and stops before touching the cluster if any is empty. CVAT's and Grafana's host comes from `url`, never from a values file. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (PostgreSQL, Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the static volume, runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods, and finally applies the TargetGroupBinding. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
 
 Its tests use stub tools and touch nothing: `deploy/tests/deploy_test.sh`.
 
