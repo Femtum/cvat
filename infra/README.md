@@ -33,60 +33,14 @@ CVAT's own RDS instance, separate from `lit-database`, so it is restored on its 
 
 ## CVAT's database user and secret
 
-Terraform manages neither the `cvat` user, nor the `rds/cvat_database_user` secret, nor its value, so the password never enters Terraform state, and Terraform Cloud cannot reach the private database anyway. Create both by hand, once, after the first apply. The role below reads the secret by name, so the order between this and `terraform apply` does not matter for IAM, but `psql` needs the instance.
-
-Run this on the Client VPN, as `AdministratorAccess` (`aws sso login`), with `psql` 16 or later and `jq`:
-
-```sh
-export AWS_REGION=ca-central-1
-password=$(openssl rand -hex 32)
-
-# The keys are the ones the chart reads from its Postgres Secret. The secret
-# uses the default aws/secretsmanager key, which the role needs no grant for.
-jq -n --arg password "$password" '{username: "cvat", database: "cvat", password: $password}' |
-  aws secretsmanager create-secret \
-    --name rds/cvat_database_user \
-    --description "CVAT database user on cvat-database, created by hand" \
-    --tags Key=App,Value=cvat Key=ManagedBy,Value=Hand \
-    --secret-string file:///dev/stdin
-
-# Connect as the RDS-managed master user, over TLS.
-read -r PGHOST master_secret_arn < <(aws rds describe-db-instances --db-instance-identifier cvat-database \
-  --query 'DBInstances[0].[Endpoint.Address, MasterUserSecret.SecretArn]' --output text)
-export PGHOST PGUSER=femtum PGDATABASE=postgres PGSSLMODE=require
-export PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id "$master_secret_arn" \
-  --query SecretString --output text | jq -r .password)
-
-# On Postgres 16 and later, the master user, which is not a superuser on RDS,
-# can only make cvat the database's owner once it may SET ROLE cvat.
-psql -v ON_ERROR_STOP=1 -v password="$password" <<'SQL'
-SET createrole_self_grant = 'set, inherit';
-CREATE ROLE cvat LOGIN PASSWORD :'password';
-CREATE DATABASE cvat OWNER cvat;
-REVOKE ALL ON DATABASE cvat FROM PUBLIC;
-SQL
-
-unset password PGPASSWORD
-```
-
-Check, in the same shell, that the secret's credentials work and that the server refuses them without TLS:
-
-```sh
-secret=$(aws secretsmanager get-secret-value --secret-id rds/cvat_database_user --query SecretString --output text)
-export PGUSER=$(jq -r .username <<<"$secret") PGDATABASE=$(jq -r .database <<<"$secret") PGPASSWORD=$(jq -r .password <<<"$secret")
-PGSSLMODE=require psql -c 'select current_user, ssl from pg_stat_ssl where pid = pg_backend_pid()'   # cvat | t
-PGSSLMODE=disable psql -c 'select 1'   # FATAL: no pg_hba.conf entry ... no encryption
-unset secret PGUSER PGDATABASE PGPASSWORD
-```
-
-To change the password, run `ALTER ROLE cvat PASSWORD ...` as the master user and `aws secretsmanager put-secret-value` with the same three keys, then let External Secrets Operator refresh the Kubernetes Secret (hourly) and restart CVAT's pods.
+CVAT connects as `cvat`, owner of the database `cvat`, with the credentials in the Secrets Manager secret `rds/cvat_database_user` (keys `username`, `database`, `password`, on the default `aws/secretsmanager` key). Both were made by hand: Terraform manages neither the user, nor the secret, nor its value, so the password never enters Terraform state.
 
 ## Secrets role for External Secrets Operator
 
 CVAT runs in the Kubernetes namespace `cvat` (see [`deploy/`](../deploy/README.md)). The platform's admission policy only lets a `SecretStore` in namespace `<namespace>` assume `role/external-secrets/<namespace>-secrets-read`, so CVAT's role is `/external-secrets/cvat-secrets-read`, output as `secrets_read_role_arn`. Renaming the namespace means renaming the role.
 
 - Its trust is the account root, pinned to the platform's External Secrets controller by `aws:PrincipalArn` (`eso_controller_role_arn` from `platform_contract`), and allows `sts:AssumeRole` and `sts:TagSession`: Pod Identity's session tags are transitive, and STS refuses the `AssumeRole` without `TagSession`.
-- It may only `GetSecretValue` and `DescribeSecret` on `rds/cvat_database_user-??????`, the exact name plus the six characters Secrets Manager appends. Never widen it to a prefix such as `rds/*`: that prefix also holds lit's database secrets.
+- It may only `GetSecretValue` and `DescribeSecret` on the secret's exact ARN, `rds/cvat_database_user-WozWrk`. A recreated secret gets a new six-character suffix: update `local.database_user_secret_id` in `secrets_read.tf`. Never widen it to a prefix such as `rds/*`: that prefix also holds lit's database secrets.
 
 ## Terraform Cloud workspace
 

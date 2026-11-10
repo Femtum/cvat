@@ -4,9 +4,10 @@ locals {
   # role/external-secrets/<ns>-secrets-read, so the role name follows it.
   kubernetes_namespace = "cvat"
 
-  # Created by hand, with its value (see README.md): the password never enters
-  # Terraform state.
-  database_user_secret_name = "rds/cvat_database_user"
+  # Created by hand, with its value: the password never enters Terraform state.
+  # The suffix is the one Secrets Manager gave it; recreating the secret means
+  # updating it here.
+  database_user_secret_id = "rds/cvat_database_user-WozWrk"
 }
 
 data "aws_caller_identity" "current" {}
@@ -42,8 +43,7 @@ resource "aws_iam_role" "secrets_read" {
   }
 }
 
-# The exact name and Secrets Manager's six-character suffix, never a prefix:
-# rds/ also holds lit's database user.
+# The exact ARN, never a prefix: rds/ also holds lit's database user.
 resource "aws_iam_role_policy" "secrets_read" {
   name = "read-own-secrets"
   role = aws_iam_role.secrets_read.id
@@ -53,7 +53,7 @@ resource "aws_iam_role_policy" "secrets_read" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-      Resource = ["arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:${local.database_user_secret_name}-??????"]
+      Resource = ["arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:${local.database_user_secret_id}"]
     }]
   })
 }
