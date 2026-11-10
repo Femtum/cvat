@@ -120,7 +120,7 @@ run "given_two_cluster_subnets_when_applying_then_each_holds_one_mount_target_in
   }
 }
 
-run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throughput_and_no_infrequent_access" {
+run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throughput" {
   command = apply
 
   assert {
@@ -133,9 +133,17 @@ run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throu
     error_message = "cvat_data must use Elastic throughput: Bursting starves a 20 GiB file system to about 1 MiB/s."
   }
 
+}
+
+run "given_the_file_system_when_applying_then_files_untouched_for_30_days_move_to_infrequent_access_and_back_on_first_read" {
+  command = apply
+
   assert {
-    condition     = length(aws_efs_file_system.data.lifecycle_policy) == 0
-    error_message = "cvat_data must stay in Standard storage: chunks are read back at random and Infrequent Access charges every read."
+    condition = jsonencode(aws_efs_file_system.data.lifecycle_policy) == jsonencode([
+      { transition_to_archive = null, transition_to_ia = "AFTER_30_DAYS", transition_to_primary_storage_class = null },
+      { transition_to_archive = null, transition_to_ia = null, transition_to_primary_storage_class = "AFTER_1_ACCESS" },
+    ])
+    error_message = "Files untouched for 30 days must move to Infrequent Access, never to Archive, and come back to Standard on their first read."
   }
 }
 
