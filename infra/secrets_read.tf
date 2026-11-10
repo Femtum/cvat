@@ -5,9 +5,12 @@ locals {
   kubernetes_namespace = "cvat"
 
   # Created by hand, with its value: the password never enters Terraform state.
-  # The suffix is the one Secrets Manager gave it; recreating the secret means
-  # updating it here.
-  database_user_secret_id = "rds/cvat_database_user-WozWrk"
+  # Secrets Manager appends a random six-character suffix to the name, and `?`
+  # matches exactly one character in an IAM resource ARN, so this keeps working
+  # when the secret is deleted and recreated with a different suffix. Naming the
+  # live suffix instead would break External Secrets Operator with an opaque
+  # AccessDenied the next time that happens.
+  database_user_secret_id = "rds/cvat_database_user-??????"
 }
 
 data "aws_caller_identity" "current" {}
