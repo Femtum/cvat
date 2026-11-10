@@ -57,13 +57,17 @@ export PGHOST PGUSER=femtum PGDATABASE=postgres PGSSLMODE=require
 export PGPASSWORD=$(aws secretsmanager get-secret-value --secret-id "$master_secret_arn" \
   --query SecretString --output text | jq -r .password)
 
-# On Postgres 16 and later, the master user, which is not a superuser on RDS,
-# can only make cvat the database's owner once it may SET ROLE cvat.
+# The master user is not a superuser on RDS. On Postgres 16 and later it can
+# only make cvat the database's owner once it may SET ROLE cvat, which RDS
+# does not grant by itself (createrole_self_grant has no effect there). Only
+# the owner can revoke PUBLIC's CONNECT, hence the SET ROLE around REVOKE.
 psql -v ON_ERROR_STOP=1 -v password="$password" <<'SQL'
-SET createrole_self_grant = 'set, inherit';
 CREATE ROLE cvat LOGIN PASSWORD :'password';
+GRANT cvat TO CURRENT_USER WITH SET TRUE, INHERIT FALSE;
 CREATE DATABASE cvat OWNER cvat;
+SET ROLE cvat;
 REVOKE ALL ON DATABASE cvat FROM PUBLIC;
+RESET ROLE;
 SQL
 
 unset password PGPASSWORD
