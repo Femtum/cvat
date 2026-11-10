@@ -14,12 +14,15 @@ override_module {
   outputs = {
     shared = {
       vpc_id                               = "vpc-0123456789abcdef0"
+      private_subnet_ids                   = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+      client_vpn_security_group_id         = "sg-0000000000000000c"
       https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
       intranet_domain                      = "rnd.intranet.femtum.com"
       reserved_rule_priorities             = [50000]
       kubernetes_cluster_name              = "femtum-rnd"
       kubernetes_cluster_security_group_id = "sg-0000000000000000e"
       kubernetes_subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
+      eso_controller_role_arn              = "arn:aws:iam::111122223333:role/femtum-rnd-external-secrets"
     }
   }
 }
@@ -120,7 +123,7 @@ run "given_two_cluster_subnets_when_applying_then_each_holds_one_mount_target_in
   }
 }
 
-run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throughput_and_no_infrequent_access" {
+run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throughput" {
   command = apply
 
   assert {
@@ -133,9 +136,17 @@ run "given_the_file_system_when_applying_then_it_is_encrypted_with_elastic_throu
     error_message = "cvat_data must use Elastic throughput: Bursting starves a 20 GiB file system to about 1 MiB/s."
   }
 
+}
+
+run "given_the_file_system_when_applying_then_files_untouched_for_30_days_move_to_infrequent_access_and_back_on_first_read" {
+  command = apply
+
   assert {
-    condition     = length(aws_efs_file_system.data.lifecycle_policy) == 0
-    error_message = "cvat_data must stay in Standard storage: chunks are read back at random and Infrequent Access charges every read."
+    condition = jsonencode(aws_efs_file_system.data.lifecycle_policy) == jsonencode([
+      { transition_to_archive = null, transition_to_ia = "AFTER_30_DAYS", transition_to_primary_storage_class = null },
+      { transition_to_archive = null, transition_to_ia = null, transition_to_primary_storage_class = "AFTER_1_ACCESS" },
+    ])
+    error_message = "Files untouched for 30 days must move to Infrequent Access, never to Archive, and come back to Standard on their first read."
   }
 }
 
@@ -218,15 +229,24 @@ run "given_a_platform_without_a_kubernetes_cluster_when_planning_then_the_plan_i
     outputs = {
       shared = {
         vpc_id                               = "vpc-0123456789abcdef0"
+        private_subnet_ids                   = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+        client_vpn_security_group_id         = "sg-0000000000000000c"
         https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
         intranet_domain                      = "rnd.intranet.femtum.com"
         reserved_rule_priorities             = [50000]
         kubernetes_cluster_name              = null
         kubernetes_cluster_security_group_id = null
         kubernetes_subnet_ids                = null
+        eso_controller_role_arn              = null
       }
     }
   }
 
-  expect_failures = [aws_vpc_security_group_ingress_rule.nfs_from_cluster]
+  # Without a cluster there is no cluster group for Postgres either, and no
+  # External Secrets controller to trust: cvat_database.tftest.hcl checks each.
+  expect_failures = [
+    aws_vpc_security_group_ingress_rule.nfs_from_cluster,
+    aws_vpc_security_group_ingress_rule.postgres,
+    aws_iam_role.secrets_read,
+  ]
 }

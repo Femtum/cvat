@@ -10,6 +10,18 @@ resource "aws_efs_file_system" "data" {
   encrypted       = true
   throughput_mode = "elastic"
 
+  # Infrequent Access stores a GB for $0.02 a month against Standard's $0.33,
+  # and adds $0.011 per GB read: a finished task's media pays for one read
+  # back within days. The first read moves a file back to Standard, so a
+  # reopened task is slow on its first frames only.
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  lifecycle_policy {
+    transition_to_primary_storage_class = "AFTER_1_ACCESS"
+  }
+
   tags = {
     Name = "${local.name}-data"
   }

@@ -139,9 +139,9 @@ that auto-triggers.
 - **`infra/`** — present. The Terraform root for Femtum's infrastructure on
   the `cvat-rnd` Terraform Cloud workspace, with its `infra/tests/*.tftest.hcl`
   suite. It holds `cvat_data`, the EFS file system behind the backend's shared
-  `ReadWriteMany` volume (see `infra/README.md`). Still to come: the
-  `cvat-database` RDS instance, its security group, and the IAM role External
-  Secrets Operator assumes to read its secret. See the `cvat-rds-root` task.
+  `ReadWriteMany` volume, and `cvat-database`, the RDS Postgres instance, with
+  its security group and the IAM role External Secrets Operator assumes to
+  read its database user secret (see `infra/README.md`).
 - **`deploy/`** — present. The Kubernetes-facing deployment assets and how to
   apply them (see `deploy/README.md`): the Helm values override for the `cvat`
   chart, the static `PersistentVolume` binding the backend's shared data to
