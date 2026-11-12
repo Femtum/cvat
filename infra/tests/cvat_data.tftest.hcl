@@ -242,11 +242,10 @@ run "given_a_platform_without_a_kubernetes_cluster_when_planning_then_the_plan_i
     }
   }
 
-  # Without a cluster there is no cluster group for Postgres either, and no
-  # External Secrets controller to trust: cvat_database.tftest.hcl checks each.
+  # Without a cluster there is no cluster group for Postgres either:
+  # cvat_database.tftest.hcl checks it.
   expect_failures = [
     aws_vpc_security_group_ingress_rule.nfs_from_cluster,
     aws_vpc_security_group_ingress_rule.postgres,
-    aws_iam_role.secrets_read,
   ]
 }

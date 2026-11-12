@@ -34,8 +34,8 @@ Concretely, Femtum commits add (and only add):
 
 - `infra/` — the Terraform root for Femtum's infrastructure (RDS, security
   groups, IAM, etc.)
-- `deploy/` — Helm values overrides, the `SecretStore`/`ExternalSecret`
-  manifests, and the SSO settings overlay
+- `deploy/` — Helm values overrides, the `ExternalSecret` manifests, and the
+  SSO settings overlay
 - `FEMTUM.md` (this file)
 - Femtum-owned GitHub Actions workflows (e.g. `.github/workflows/femtum-*.yml`)
 
@@ -140,13 +140,12 @@ that auto-triggers.
   the `cvat-rnd` Terraform Cloud workspace, with its `infra/tests/*.tftest.hcl`
   suite. It holds `cvat_data`, the EFS file system behind the backend's shared
   `ReadWriteMany` volume, and `cvat-database`, the RDS Postgres instance, with
-  its security group and the IAM role External Secrets Operator assumes to
-  read its database user secret (see `infra/README.md`).
+  its security group (see `infra/README.md`).
 - **`deploy/`** — present. The Kubernetes-facing deployment assets and how to
   apply them (see `deploy/README.md`): the Helm values override for the `cvat`
   chart, which points CVAT at `cvat-database` on RDS instead of the bundled
-  Postgres; the `SecretStore` and `ExternalSecret` that bring its database
-  user in from AWS Secrets Manager; the static `PersistentVolume` binding the
+  Postgres; the `ExternalSecret` that brings its database user in from AWS
+  Secrets Manager, through the platform's `ClusterSecretStore`; the static `PersistentVolume` binding the
   backend's shared data to `cvat_data`; and the `TargetGroupBinding` putting
   Traefik behind the platform's shared ALB at `cvat.rnd.intranet.femtum.com`.
   Still to come: the SSO settings overlay.
