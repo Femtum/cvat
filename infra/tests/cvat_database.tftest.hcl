@@ -1,26 +1,19 @@
 # Locks who reaches cvat-database and how it is kept: Postgres only from the
 # cluster's and the Client VPN's security groups, never from a network, no
-# egress, encrypted, private and protected from deletion; and the role External
-# Secrets Operator assumes reads CVAT's database user secret and nothing else.
+# egress, encrypted, private and protected from deletion.
 #
 # core/infra/database.tf (lit-database) is the structure these tests mirror,
 # not the model: it has no storage_encrypted, no deletion_protection and an
 # allow-all egress rule, all three of which are refused here.
 #
-# The AWS provider is mocked and the platform contract is overridden, so the
-# suite needs no credentials, creates nothing and costs nothing. It applies
-# against the mock because Terraform 1.10 cannot override computed values
-# during plan.
+# The AWS and TFE providers are mocked and the platform contract is overridden,
+# so the suite needs no credentials or Terraform Cloud access, creates nothing
+# and costs nothing. It applies against the mock because Terraform 1.10 cannot
+# override computed values during plan.
 
-mock_provider "aws" {
-  # The account goes into the trust and the secret's ARN.
-  mock_data "aws_caller_identity" {
-    defaults = {
-      account_id = "111122223333"
-      arn        = "arn:aws:sts::111122223333:assumed-role/tfc-role/run-abc"
-    }
-  }
-}
+mock_provider "tfe" {}
+
+mock_provider "aws" {}
 
 override_module {
   target = module.platform
@@ -224,50 +217,6 @@ run "given_the_platform_subnets_when_applying_then_the_database_lives_in_the_pri
   }
 }
 
-run "given_the_admission_policy_when_planned_then_the_role_is_the_one_cvats_namespace_may_assume" {
-  command = plan
-
-  assert {
-    condition     = aws_iam_role.secrets_read.name == "cvat-secrets-read" && aws_iam_role.secrets_read.path == "/external-secrets/"
-    error_message = "The platform only lets a SecretStore in namespace cvat assume role/external-secrets/cvat-secrets-read."
-  }
-}
-
-run "given_the_eso_controller_when_applying_then_only_it_may_assume_the_role_with_its_session_tags" {
-  command = apply
-
-  assert {
-    condition = jsondecode(aws_iam_role.secrets_read.assume_role_policy) == {
-      Version = "2012-10-17"
-      Statement = [{
-        Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::111122223333:root" }
-        Action    = ["sts:AssumeRole", "sts:TagSession"]
-        Condition = {
-          ArnEquals = { "aws:PrincipalArn" = "arn:aws:iam::111122223333:role/femtum-rnd-external-secrets" }
-        }
-      }]
-    }
-    error_message = "Only the External Secrets controller, pinned by aws:PrincipalArn, may assume the role, and with sts:TagSession: STS refuses the AssumeRole without it."
-  }
-}
-
-run "given_the_secrets_read_role_when_applying_then_it_reads_cvats_database_user_secret_only" {
-  command = apply
-
-  assert {
-    condition = jsondecode(aws_iam_role_policy.secrets_read.policy) == {
-      Version = "2012-10-17"
-      Statement = [{
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-        Resource = ["arn:aws:secretsmanager:ca-central-1:111122223333:secret:rds/cvat_database_user-??????"]
-      }]
-    }
-    error_message = "The role must only read rds/cvat_database_user by its exact ARN: a prefix such as rds/* reaches lit's database secrets."
-  }
-}
-
 run "given_a_platform_without_a_cluster_group_when_planning_then_postgres_refuses_the_plan" {
   command = plan
 
@@ -294,28 +243,4 @@ run "given_a_platform_without_a_cluster_group_when_planning_then_postgres_refuse
     aws_vpc_security_group_ingress_rule.postgres,
     aws_vpc_security_group_ingress_rule.nfs_from_cluster,
   ]
-}
-
-run "given_a_platform_without_an_eso_controller_when_planning_then_the_secrets_role_refuses_the_plan" {
-  command = plan
-
-  override_module {
-    target = module.platform
-    outputs = {
-      shared = {
-        vpc_id                               = "vpc-0123456789abcdef0"
-        private_subnet_ids                   = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
-        client_vpn_security_group_id         = "sg-0000000000000000c"
-        https_listener_arn                   = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:listener/app/femtum-lit-api-alb/0123456789abcdef/0123456789abcdef"
-        intranet_domain                      = "rnd.intranet.femtum.com"
-        reserved_rule_priorities             = [50000]
-        kubernetes_cluster_name              = "femtum-rnd"
-        kubernetes_cluster_security_group_id = "sg-0000000000000000e"
-        kubernetes_subnet_ids                = ["subnet-0aaaaaaaaaaaaaaaa", "subnet-0bbbbbbbbbbbbbbbb"]
-        eso_controller_role_arn              = null
-      }
-    }
-  }
-
-  expect_failures = [aws_iam_role.secrets_read]
 }

@@ -9,11 +9,11 @@ Run everything over the Client VPN, as `AdministratorAccess`, once `infra/` is a
 ```sh
 deploy/deploy.sh
 kubectl get pvc -n cvat cvat-backend-data   # Bound to cvat-backend-data
-kubectl get secretstore,externalsecret -n cvat   # Valid, SecretSynced
+kubectl get externalsecret -n cvat            # SecretSynced
 kubectl get jobs -n cvat                      # cvat-backend-initializer-r<revision> Complete
 ```
 
-The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle`, `target_group_arn`, `url`, `database_address` and `secrets_read_role_arn` from `infra/`, and stops before touching the cluster if any is empty. CVAT's and Grafana's host comes from `url`, and the database host from `database_address`, never from a values file. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the namespace, the static volume, the `SecretStore` and the `ExternalSecret`, and waits up to 2 minutes for the database user's Secret to sync. It then runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods and for the initializer Job, which runs CVAT's migrations, and finally applies the TargetGroupBinding. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
+The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle`, `target_group_arn`, `url` and `database_address` from `infra/`, and stops before touching the cluster if any is empty. CVAT's and Grafana's host comes from `url`, and the database host from `database_address`, never from a values file. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the namespace, the static volume and the `ExternalSecret`, and waits up to 2 minutes for the database user's Secret to sync. It then runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods and for the initializer Job, which runs CVAT's migrations, and finally applies the TargetGroupBinding. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
 
 Its tests use stub tools and touch nothing: `deploy/tests/deploy_test.sh`.
 
@@ -23,7 +23,7 @@ Its tests use stub tools and touch nothing: `deploy/tests/deploy_test.sh`.
 
 CVAT uses `cvat-database`, the RDS Postgres 17 instance in `infra/`, as the user `cvat`; the chart's own PostgreSQL is off (`postgresql.enabled: false`).
 
-- **Credentials.** `secret-store.yaml` is the namespace's `SecretStore`: it assumes `secrets_read_role_arn`, `role/external-secrets/cvat-secrets-read`. The platform's admission policy refuses any other role in namespace `cvat`, and any `auth`, `additionalRoles` or `sessionTags` on the store. `database-user.external-secret.yaml` copies the keys `username`, `database` and `password` of the Secrets Manager secret `rds/cvat_database_user` into the Secret `cvat-database-user`, which the chart reads (`postgresql.secret.name`, with `postgresql.secret.create: false`).
+- **Credentials.** `database-user.external-secret.yaml` reads through the platform's `ClusterSecretStore` `aws-secrets-manager`, which reaches `k8s/cvat/*` from namespace `cvat` and nothing else. It copies the keys `username`, `database` and `password` of the Secrets Manager secret `k8s/cvat/database` into the Secret `cvat-database-user`, which the chart reads (`postgresql.secret.name`, with `postgresql.secret.create: false`).
 - **The password reaches CVAT only as `CVAT_POSTGRES_PASSWORD`.** Never also set `CVAT_POSTGRES_PASSWORD_FILE`: CVAT refuses to start with both.
 - **TLS.** `PGSSLMODE=require` on every backend pod, through `cvat.backend.additionalEnv`; the server's `rds.force_ssl` refuses plain connections anyway. The certificate is not verified: the connection stays inside the VPC.
 - **Changing the password.** Change it in Postgres and in the secret, then wait for the hourly refresh or force it with `kubectl annotate externalsecret -n cvat cvat-database-user force-sync=$(date +%s) --overwrite`. The pods read it at start only: `kubectl rollout restart deployment -n cvat`.
@@ -54,7 +54,7 @@ curl -sI https://cvat.rnd.intranet.femtum.com | head -1      # HTTP/2 200
 
 ## What survives what
 
-- `helm uninstall`: the database is on RDS and stays. The `SecretStore`, the `ExternalSecret` and its Secret are not part of the release and stay too. The chart keeps the claim (`helm.sh/resource-policy: keep`), so nothing changes. The binding stays and points at no pods until the next install; the target group belongs to `infra/` and is never deleted by the cluster.
+- `helm uninstall`: the database is on RDS and stays. The `ExternalSecret` and its Secret are not part of the release and stay too. The chart keeps the claim (`helm.sh/resource-policy: keep`), so nothing changes. The binding stays and points at no pods until the next install; the target group belongs to `infra/` and is never deleted by the cluster.
 - Deleting the claim: the volume is `Retain`, so the data stays, and the volume turns `Released`. Release it for the new claim before reinstalling: `kubectl patch pv cvat-backend-data --type=json -p '[{"op":"remove","path":"/spec/claimRef/uid"}]'`.
 - `terraform destroy`: refused by `prevent_destroy`.
 - Deleted files: restore from the vault, `aws backup list-recovery-points-by-backup-vault --backup-vault-name cvat-rnd`.
