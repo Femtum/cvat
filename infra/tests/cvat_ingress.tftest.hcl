@@ -2,8 +2,11 @@
 # group Traefik's pods are bound to. How app_ingress routes the host and checks
 # the targets is tested in Femtum/Infrastructure.
 #
-# The AWS provider is mocked and the platform contract is overridden, so the
-# suite needs no credentials, creates nothing and costs nothing.
+# The AWS and TFE providers are mocked and the platform contract is overridden,
+# so the suite needs no credentials or Terraform Cloud access, creates nothing
+# and costs nothing.
+
+mock_provider "tfe" {}
 
 mock_provider "aws" {}
 

@@ -2,10 +2,12 @@
 # Kubernetes cluster, never from a network, every mount over TLS and through
 # CVAT's access point, a mount target in each cluster zone, and a daily backup.
 #
-# The AWS provider is mocked and the platform contract is overridden, so the
-# suite needs no credentials, creates nothing and costs nothing. It applies
-# against the mock because Terraform 1.10 cannot override computed values
-# during plan.
+# The AWS and TFE providers are mocked and the platform contract is overridden,
+# so the suite needs no credentials or Terraform Cloud access, creates nothing
+# and costs nothing. It applies against the mock because Terraform 1.10 cannot
+# override computed values during plan.
+
+mock_provider "tfe" {}
 
 mock_provider "aws" {}
 

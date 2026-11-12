@@ -11,13 +11,13 @@ locals {
 # `source`, so both modules repeat the ref: bump them together, app_ingress
 # takes platform_contract's output.
 module "platform" {
-  source = "git::ssh://git@github.com/Femtum/Infrastructure.git//infrastructure-aws/modules/platform_contract?ref=3ae7fe7de569a752c6bc599427c12231a64665e5"
+  source = "git::ssh://git@github.com/Femtum/Infrastructure.git//infrastructure-aws/modules/platform_contract?ref=c8c57d74d1e7d3890bfaa6317d6ea366eb075345"
 
   environment_name = var.environment_name
 }
 
 module "ingress" {
-  source = "git::ssh://git@github.com/Femtum/Infrastructure.git//infrastructure-aws/modules/app_ingress?ref=3ae7fe7de569a752c6bc599427c12231a64665e5"
+  source = "git::ssh://git@github.com/Femtum/Infrastructure.git//infrastructure-aws/modules/app_ingress?ref=c8c57d74d1e7d3890bfaa6317d6ea366eb075345"
 
   name     = local.name
   platform = module.platform.shared
