@@ -1,8 +1,8 @@
 # CVAT infrastructure
 
-What CVAT owns on the platform: `cvat_data`, the EFS file system its server and workers share (`<release>-backend-data`, `ReadWriteMany`), with its mount targets, NFS security group, access point and backups; `cvat-database`, the Postgres instance CVAT's server connects to, with its security group; and `cvat.<env>.intranet.femtum.com` on the shared HTTPS listener, at priority `30`, forwarding to the target group Traefik's pods are bound to (`/ping` health check). The platform ([Femtum/Infrastructure](https://github.com/Femtum/Infrastructure), `infrastructure-aws`) runs the Kubernetes cluster, its EFS CSI driver and External Secrets Operator, and knows nothing about this app.
+What CVAT owns on the platform: `cvat_data`, the EFS file system its server and workers share (`<release>-backend-data`, `ReadWriteMany`), with its mount targets, NFS security group, access point and backups; `cvat-database`, the Postgres instance CVAT's server connects to, with its security group; and the `url` output, `https://cvat.<env>.intranet.femtum.com`, which `deploy/deploy.sh` routes on the platform's Gateway. The platform ([Femtum/Infrastructure](https://github.com/Femtum/Infrastructure), `infrastructure-aws`) runs the Kubernetes cluster, its EFS CSI driver and External Secrets Operator, and knows nothing about this app.
 
-The `platform_contract` and `app_ingress` modules come from `Femtum/Infrastructure` over SSH, pinned to one commit in `platform.tf`. Downloading them needs read access to that repository: your own GitHub SSH key locally, the workspace's SSH key in Terraform Cloud. `platform_contract` reads the platform workspace's outputs through `tfe_outputs`, outputs only, never the platform's state, and the plan is refused while the platform runs no Kubernetes cluster. Apply the platform before bumping the ref.
+The `platform_contract` module comes from `Femtum/Infrastructure` over SSH, pinned to a commit in `platform.tf`. Downloading it needs read access to that repository: your own GitHub SSH key locally, the workspace's SSH key in Terraform Cloud. `platform_contract` reads the platform workspace's outputs through `tfe_outputs`, outputs only, never the platform's state, and the plan is refused while the platform runs no Kubernetes cluster. Apply the platform before bumping the ref.
 
 ## cvat_data
 
@@ -66,7 +66,7 @@ terraform apply
 
 ## Deploy on Kubernetes
 
-The chart, its values, the volume bound to `cvat_data` and the binding to the target group are in [`deploy/`](../deploy/README.md).
+The chart, its values, the volume bound to `cvat_data` and the Gateway route are in [`deploy/`](../deploy/README.md).
 
 ## Tests
 

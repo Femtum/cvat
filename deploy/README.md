@@ -1,6 +1,6 @@
 # Deploying CVAT on Kubernetes
 
-How CVAT runs on the platform's `femtum-rnd` cluster: upstream's chart (`helm-chart/`, unmodified), Femtum's values on top of it, the static volume that binds the backend's shared data to `cvat_data`, the EFS file system and the `cvat-database` RDS instance in [`infra/`](../infra/README.md), the External Secrets objects that bring the database user in from Secrets Manager, and the binding and route that put Traefik behind the platform's shared ALB and its Gateway at `https://cvat.rnd.intranet.femtum.com`.
+How CVAT runs on the platform's `femtum-rnd` cluster: upstream's chart (`helm-chart/`, unmodified), Femtum's values on top of it, the static volume that binds the backend's shared data to `cvat_data`, the EFS file system and the `cvat-database` RDS instance in [`infra/`](../infra/README.md), the External Secrets objects that bring the database user in from Secrets Manager, and the route that puts Traefik behind the platform's Gateway at `https://cvat.rnd.intranet.femtum.com`.
 
 Run everything over the Client VPN, as `AdministratorAccess`, once `infra/` is applied, the cluster has its default StorageClass and External Secrets Operator (see the platform's [`kubernetes/README.md`](https://github.com/Femtum/Infrastructure/blob/main/infrastructure-aws/kubernetes/README.md), "Storage" and "Secrets from Secrets Manager"), and the database user and its secret exist (see `infra/README.md`). The release is `cvat` in namespace `cvat`: the PersistentVolume is reserved for the claim `cvat/cvat-backend-data`, which the chart names `<release>-backend-data`.
 
@@ -13,7 +13,7 @@ kubectl get externalsecret -n cvat            # SecretSynced
 kubectl get jobs -n cvat                      # cvat-backend-initializer-r<revision> Complete
 ```
 
-The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle`, `target_group_arn`, `url` and `database_address` from `infra/`, and stops before touching the cluster if any is empty. CVAT's and Grafana's host comes from `url`, and the database host from `database_address`, never from a values file. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the namespace, the static volume and the `ExternalSecret`, and waits up to 2 minutes for the database user's Secret to sync. It then runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods and for the initializer Job, which runs CVAT's migrations, and finally applies the TargetGroupBinding. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
+The script is the same for a first install and every upgrade. It reads `backend_data_volume_handle`, `url` and `database_address` from `infra/`, and stops before touching the cluster if any is empty. CVAT's and Grafana's host comes from `url`, and the database host from `database_address`, never from a values file. Then it points kubectl at `femtum-rnd` and downloads the chart's dependencies (Redis, Traefik, …) into `helm-chart/charts/`, which git ignores along with `Chart.lock`. It applies the namespace, the static volume and the `ExternalSecret`, and waits up to 2 minutes for the database user's Secret to sync. It then runs `helm upgrade --install` with upstream's values and then `deploy/cvat.values.yaml`, waiting up to 15 minutes for the pods and for the initializer Job, which runs CVAT's migrations, and finally applies Traefik's health check and the HTTPRoute. Rerun it after every rebase onto a new upstream tag, since the dependencies change too.
 
 Its tests use stub tools and touch nothing: `deploy/tests/deploy_test.sh`.
 
@@ -40,31 +40,19 @@ print(c.fetchone())'                      # ('cvat', 'PostgreSQL 17...', True)
 
 ## Reaching CVAT
 
-The office and Client VPN users reach `https://cvat.rnd.intranet.femtum.com` through the shared ALB, like every other app: no DNS record or certificate to add. The ALB terminates TLS and forwards to Traefik's pods, registered into `infra/`'s target group by `deploy/target-group-binding.yaml`. Traefik splits requests by path between the frontend, the backend and `/analytics`.
+The office and Client VPN users reach `https://cvat.rnd.intranet.femtum.com` through the platform Gateway (`platform-gateway/platform`, listener `https`), like every other app: no DNS record or certificate to add. Its ALB terminates TLS, and `deploy/http-route.yaml` routes the host to Traefik, which splits requests by path between the frontend, the backend and `/analytics`. `deploy/traefik.target-group-configuration.yaml` health-checks Traefik's pods on `/ping`, which the chart's healthcheck `IngressRoute` answers on any host.
 
 Traefik's Service is `ClusterIP`, so the cluster runs no load balancer of its own. Check after an install:
 
 ```sh
-target_group_arn=$(terraform -chdir=infra output -raw target_group_arn)
 kubectl get svc -n cvat cvat-traefik                          # TYPE ClusterIP, no EXTERNAL-IP
-aws elbv2 describe-target-health --target-group-arn "$target_group_arn" \
-  --query 'TargetHealthDescriptions[].TargetHealth.State'    # healthy
+kubectl get httproute -n cvat cvat -o jsonpath='{range .status.parents[0].conditions[*]}{.type}={.status} {end}{"\n"}'   # Accepted=True ResolvedRefs=True
 curl -sI https://cvat.rnd.intranet.femtum.com | head -1      # HTTP/2 200
 ```
 
-The same host is also on the platform Gateway (`platform-gateway/platform`, listener `https`): `deploy/http-route.yaml` routes it to Traefik, and `deploy/traefik.target-group-configuration.yaml` health-checks Traefik's pods on `/ping`, which the chart's healthcheck `IngressRoute` answers on any host. DNS reaches the Gateway from the platform's cutover on; until then, pin the host to it:
-
-```sh
-kubectl get httproute -n cvat cvat -o jsonpath='{range .status.parents[0].conditions[*]}{.type}={.status} {end}{"\n"}'   # Accepted=True ResolvedRefs=True
-curl -sI --resolve cvat.rnd.intranet.femtum.com:443:10.0.100.48 \
-  https://cvat.rnd.intranet.femtum.com | head -1             # HTTP/2 200
-```
-
-After the cutover, the binding and `infra/`'s target group go with the old shared ALB.
-
 ## What survives what
 
-- `helm uninstall`: the database is on RDS and stays. The `ExternalSecret` and its Secret are not part of the release and stay too. The chart keeps the claim (`helm.sh/resource-policy: keep`), so nothing changes. The binding stays and points at no pods until the next install; the target group belongs to `infra/` and is never deleted by the cluster.
+- `helm uninstall`: the database is on RDS and stays. The `ExternalSecret` and its Secret are not part of the release and stay too. The chart keeps the claim (`helm.sh/resource-policy: keep`), so nothing changes. The HTTPRoute stays and routes to no pods until the next install.
 - Deleting the claim: the volume is `Retain`, so the data stays, and the volume turns `Released`. Release it for the new claim before reinstalling: `kubectl patch pv cvat-backend-data --type=json -p '[{"op":"remove","path":"/spec/claimRef/uid"}]'`.
 - `terraform destroy`: refused by `prevent_destroy`.
 - Deleted files: restore from the vault, `aws backup list-recovery-points-by-backup-vault --backup-vault-name cvat-rnd`.

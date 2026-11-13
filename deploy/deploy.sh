@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # backend-data.pv.yaml reserves its volume for cvat/cvat-backend-data, and
-# namespace.yaml, database-user.external-secret.yaml, target-group-binding.yaml,
+# namespace.yaml, database-user.external-secret.yaml,
 # traefik.target-group-configuration.yaml and http-route.yaml live in
 # namespace cvat: all follow this release.
 readonly release=cvat
@@ -44,9 +44,8 @@ main() {
   [[ $# -eq 0 ]] || fail "takes no arguments"
   require_tools aws terraform helm kubectl
 
-  local volume_handle target_group_arn url database_address
+  local volume_handle url database_address
   volume_handle=$(infra_output backend_data_volume_handle)
-  target_group_arn=$(infra_output target_group_arn)
   url=$(infra_output url)
   database_address=$(infra_output database_address)
 
@@ -58,8 +57,8 @@ main() {
   # Secret: sync it before the release starts them.
   kubectl apply -f "$repo_root/deploy/database-user.external-secret.yaml"
   kubectl wait --for=condition=Ready externalsecret/cvat-database-user --namespace "$namespace" --timeout 2m
-  # The shared ALB terminates TLS for the host infra/ registered on it and
-  # forwards plain HTTP to Traefik, which splits it by path. Grafana builds
+  # The Gateway's ALB terminates TLS for the host and forwards plain HTTP to
+  # Traefik, which splits it by path. Grafana builds
   # its links and redirects from its own root URL. --wait-for-jobs holds the
   # release until the initializer has run CVAT's migrations.
   helm upgrade --install "$release" "$repo_root/helm-chart" \
@@ -70,7 +69,6 @@ main() {
     --set-string "grafana.grafana\.ini.server.root_url=$url/analytics" \
     --set-string "postgresql.external.host=$database_address" \
     --wait --wait-for-jobs --timeout 15m
-  apply_manifest target-group-binding.yaml TARGET_GROUP_ARN "$target_group_arn"
   kubectl apply -f "$repo_root/deploy/traefik.target-group-configuration.yaml"
   apply_manifest http-route.yaml HOSTNAME "${url#https://}"
 }

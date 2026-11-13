@@ -3,13 +3,9 @@ output "backend_data_volume_handle" {
   value       = "${aws_efs_file_system.data.id}::${aws_efs_access_point.data.id}"
 }
 
-output "target_group_arn" {
-  description = "Target group the TargetGroupBinding registers Traefik's pods into"
-  value       = module.ingress.target_group_arn
-}
-
 output "url" {
-  value = "https://${module.ingress.hostname}"
+  description = "Where office and Client VPN users reach CVAT, through the platform's Gateway"
+  value       = "https://${local.name}.${module.platform.shared.intranet_domain}"
 }
 
 output "database_address" {
