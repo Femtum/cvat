@@ -5,6 +5,10 @@ locals {
   # health checks. Traefik splits them between CVAT's frontend, backend and
   # analytics by path.
   traefik_web_port = 8000
+
+  # The platform's ApplicationSet owns this convention, and its External
+  # Secrets store derives the readable prefix k8s/<namespace>/ from it.
+  kubernetes_namespace = "${local.name}-${var.environment_name}"
 }
 
 # Pinned to a commit of Femtum/Infrastructure. Terraform only accepts a literal

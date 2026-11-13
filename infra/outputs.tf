@@ -16,3 +16,13 @@ output "database_address" {
   description = "Host of cvat-database, for the chart's postgresql.external.host"
   value       = aws_db_instance.database.address
 }
+
+output "kubernetes_namespace" {
+  description = "Namespace Argo CD deploys CVAT into, which the platform's ApplicationSet names <app>-<env> after deploy/cvat/values-<env>.yaml"
+  value       = local.kubernetes_namespace
+}
+
+output "database_secret_name" {
+  description = "Secrets Manager secret holding CVAT's database user (username, database, password), made by hand: the platform's store only lets kubernetes_namespace read k8s/<namespace>/*"
+  value       = "k8s/${local.kubernetes_namespace}/database"
+}
