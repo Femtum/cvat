@@ -1,6 +1,0 @@
-# Created before the release: the ExternalSecret must sync the
-# database user's Secret before the chart's initializer reads it.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cvat
