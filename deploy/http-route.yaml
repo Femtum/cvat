@@ -1,0 +1,22 @@
+# CVAT's host on the platform's Gateway, which the office and Client VPN reach
+# from the platform's cutover on. Traefik keeps splitting requests by path
+# between the frontend, the backend and /analytics, behind its forward-auth to
+# CVAT, which the ALB cannot do. HOSTNAME is infra/'s url without https://.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cvat
+  namespace: cvat
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: platform-gateway
+      name: platform
+      sectionName: https
+  hostnames:
+    - HOSTNAME
+  rules:
+    - backendRefs:
+        - name: cvat-traefik
+          port: 80

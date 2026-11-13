@@ -77,11 +77,14 @@ kubectl apply -f $repo_root/deploy/database-user.external-secret.yaml
 kubectl wait --for=condition=Ready externalsecret/cvat-database-user --namespace cvat --timeout 2m
 helm upgrade --install cvat $repo_root/helm-chart --namespace cvat -f $repo_root/helm-chart/cvat.values.yaml -f $repo_root/deploy/cvat.values.yaml --set-string ingress.hostname=cvat.rnd.intranet.femtum.com --set-string grafana.grafana\\.ini.server.root_url=https://cvat.rnd.intranet.femtum.com/analytics --set-string postgresql.external.host=cvat-database.abcdefghijkl.ca-central-1.rds.amazonaws.com --wait --wait-for-jobs --timeout 15m
 kubectl apply -f -
-$(sed 's|TARGET_GROUP_ARN|arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef|' "$repo_root/deploy/target-group-binding.yaml")" "$(cat "$CALLS")"
+$(sed 's|TARGET_GROUP_ARN|arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef|' "$repo_root/deploy/target-group-binding.yaml")
+kubectl apply -f $repo_root/deploy/traefik.target-group-configuration.yaml
+kubectl apply -f -
+$(sed 's|HOSTNAME|cvat.rnd.intranet.femtum.com|' "$repo_root/deploy/http-route.yaml")" "$(cat "$CALLS")"
   rm -rf "$work"
 }
 
-test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_the_arn() {
+test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_the_arn_and_the_host() {
   # given
   local work; work=$(mktemp -d)
   make_stubs "$work/bin"
@@ -97,7 +100,8 @@ test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_t
   check "the volume handle is applied" "    volumeHandle: fs-0123456789abcdef0::fsap-0123456789abcdef0" "$(grep 'volumeHandle:' "$CALLS")"
   check "the target group ARN is applied" "  targetGroupARN: arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef" "$(grep 'targetGroupARN:' "$CALLS")"
   check "no store or role of its own is applied" "" "$(grep -E 'kind: SecretStore|role:' "$CALLS")"
-  check "no placeholder is left" "" "$(grep -E 'VOLUME_HANDLE|TARGET_GROUP_ARN' "$CALLS")"
+  check "the route carries the host, without its scheme" "    - cvat.rnd.intranet.femtum.com" "$(grep -A1 'hostnames:' "$CALLS" | tail -1)"
+  check "no placeholder is left" "" "$(grep -E 'VOLUME_HANDLE|TARGET_GROUP_ARN|HOSTNAME' "$CALLS")"
   rm -rf "$work"
 }
 
@@ -193,7 +197,7 @@ test_given_an_argument_when_deploying_then_it_is_refused() {
 }
 
 test_given_both_outputs_when_deploying_then_the_volume_the_release_and_the_binding_are_applied_in_order
-test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_and_the_arn
+test_given_both_outputs_when_deploying_then_the_manifests_carry_the_handle_the_arn_and_the_host
 test_given_infra_not_applied_when_deploying_then_it_stops_before_touching_the_cluster
 test_given_infra_without_a_url_when_deploying_then_it_stops_before_touching_the_cluster
 test_given_infra_without_a_database_address_when_deploying_then_it_stops_before_touching_the_cluster
