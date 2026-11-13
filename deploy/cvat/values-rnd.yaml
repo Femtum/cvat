@@ -1,0 +1,18 @@
+# Application cvat-rnd, namespace cvat-rnd, on femtum-rnd. Argo CD cannot run
+# terraform: the database host and the target group are infra/'s outputs
+# database_address and target_group_arn, copied here. Re-copy them if infra/
+# ever replaces either.
+
+global:
+  # infra/'s url, without https://.
+  hostname: &hostname cvat.rnd.intranet.femtum.com
+
+targetGroupBinding:
+  targetGroupARN: arn:aws:elasticloadbalancing:ca-central-1:148761635720:targetgroup/cvat-http/3584356a63c16cbc
+
+cvat:
+  ingress:
+    hostname: *hostname
+  postgresql:
+    external:
+      host: cvat-database.ct0oy4oug14q.ca-central-1.rds.amazonaws.com

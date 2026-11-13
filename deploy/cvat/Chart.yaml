@@ -1,0 +1,13 @@
+apiVersion: v2
+name: cvat-femtum
+description: CVAT on Femtum's platform, deployed by Argo CD from deploy/cvat/values-<env>.yaml
+type: application
+version: 1.0.0
+
+# Argo CD renders from git alone, where helm-chart/charts/ is ignored: the
+# package in charts/ carries upstream's chart with its own dependencies inside.
+# Rebuild it after every rebase onto a new upstream tag (deploy/README.md).
+dependencies:
+  - name: cvat
+    version: "*"
+    repository: file://../../helm-chart

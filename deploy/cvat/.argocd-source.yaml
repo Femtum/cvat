@@ -1,0 +1,9 @@
+# Merged by Argo CD's repo-server into this path's Helm source, for every
+# Application the platform's ApplicationSet makes from it. Traefik's package
+# ships its CRDs and the Gateway API's in crds/, which Argo CD renders by
+# default: the project apps refuses every cluster-scoped kind but Namespace,
+# so one CRD would fail the whole sync. The cluster already has Traefik's
+# CRDs. Skipping tests drops Helm test hooks Argo CD never runs.
+helm:
+  skipCrds: true
+  skipTests: true

@@ -1,0 +1,178 @@
+# What every environment shares. deploy/cvat/values-<env>.yaml adds the
+# environment's host, database and target group. Upstream's chart reads the
+# values under `cvat`, its name as a dependency, so its own `cvat` key nests
+# once more.
+
+# The host CVAT answers on, set by values-<env>.yaml. The HTTPRoute and
+# Grafana's root URL read it; upstream's Ingress takes cvat.ingress.hostname,
+# which values-<env>.yaml anchors to this one.
+global:
+  hostname: ""
+
+# The shared ALB's target group, which infra/ owns and publishes as
+# target_group_arn. Kept until the platform's DNS cutover moves every host to
+# the Gateway.
+targetGroupBinding:
+  targetGroupARN: ""
+
+cvat:
+  # Upstream's helm-chart/cvat.values.yaml, which deploy.sh used to pass first.
+  analytics:
+    enabled: true
+  traefik:
+    enabled: true
+    # Argo CD may only create namespaced objects: no ClusterRole, no
+    # IngressClass. Namespaced RBAC also keeps this Traefik to cvat-<env>'s own
+    # Ingresses and Middlewares.
+    rbac:
+      namespaced: true
+    ingressClass:
+      enabled: false
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+    # Reached through the Gateway's HTTPRoute and the shared ALB's target
+    # group, never through a load balancer of its own: a LoadBalancer Service
+    # would get its own NLB.
+    service:
+      type: ClusterIP
+    ports:
+      web:
+        # The ALBs' addresses, inside the platform VPC (10.0.0.0/16): without
+        # this, Traefik rewrites X-Forwarded-Proto to http and Django answers
+        # HTTPS requests as plain HTTP.
+        forwardedHeaders:
+          trustedIPs:
+            - 10.0.0.0/16
+    # The ALBs health-check each pod with its IP as host, which no CVAT route
+    # matches.
+    ingressRoute:
+      healthcheck:
+        enabled: true
+        entryPoints:
+          - web
+
+  ingress:
+    enabled: true
+    # Without an IngressClass, the annotation is how this Traefik claims the
+    # Ingresses. It also keeps the API server's default-class admission from
+    # writing another class into them while the hand-run release's default
+    # IngressClass cvat-traefik still exists.
+    annotations:
+      kubernetes.io/ingress.class: traefik
+
+  # EKS Auto Mode sizes nodes from requests alone: upstream requests nothing, so
+  # every pod lands on one c6a.large, which runs out of memory and goes NotReady.
+  # Requests are each pod's usage at rest; imports and exports burst above them.
+  cvat:
+    backend:
+      # rds.force_ssl refuses plain connections; libpq's default, prefer, would
+      # fall back to plain text against a server that allowed it.
+      additionalEnv:
+        - name: PGSSLMODE
+          value: require
+      # The claim is templates/backend-data.pvc.yaml, pinned to the static
+      # volume: upstream's has no volumeName. Every backend pod mounts it under
+      # this name.
+      defaultStorage:
+        enabled: false
+      additionalVolumes:
+        - name: cvat-backend-data
+          persistentVolumeClaim:
+            claimName: cvat-backend-data
+      # The access point writes every file on cvat_data as CVAT's user, so the
+      # recursive chmod has nothing to fix. It would also slow every pod start
+      # as cvat_data grows, and it requests the server's resources whatever
+      # pod it runs in.
+      permissionFix:
+        enabled: false
+      # The ALB and then Traefik each append to X-Forwarded-For: with one hop,
+      # Django takes the ALB's address for every user's.
+      numProxies: 2
+      initializer:
+        # Upstream names the Job after the Helm revision, always 1 under Argo
+        # CD, and a Job's pod template is immutable: as a plain resource it
+        # would run the migrations once and then fail every sync that changes
+        # it. As a Sync hook it is recreated on every sync, in wave 0 with
+        # Redis and ClickHouse, which it waits for, after the database user's
+        # Secret in wave -1. PreSync would run before that Secret exists.
+        annotations:
+          argocd.argoproj.io/hook: Sync
+          argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+        resources:
+          requests: {cpu: 100m, memory: 512Mi}
+      server:
+        resources:
+          requests: {cpu: 250m, memory: 1Gi}
+      worker:
+        export:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        import:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        annotation:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        webhooks:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        qualityreports:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        chunks:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        consensus:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+        utils:
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+    frontend:
+      resources:
+        requests: {cpu: 10m, memory: 32Mi}
+    opa:
+      resources:
+        requests: {cpu: 10m, memory: 64Mi}
+    kvrocks:
+      resources:
+        requests: {cpu: 50m, memory: 256Mi}
+
+  clickhouse:
+    # Without a limit, ClickHouse sizes its caches from the node's whole memory.
+    resources:
+      requests: {cpu: 100m, memory: 1Gi}
+      limits: {memory: 2Gi}
+
+  grafana:
+    resources:
+      requests: {cpu: 25m, memory: 128Mi}
+    # Argo CD renders without the cluster, where the chart's lookup of its
+    # admin Secret finds nothing and draws a new random password on every
+    # render, restarting Grafana through its checksum. Upstream disables the
+    # login form and lets anonymous users in, so no admin is needed at all.
+    env:
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+    "grafana.ini":
+      server:
+        root_url: "https://{{ .Values.global.hostname }}/analytics"
+    rbac:
+      namespaced: true
+    # A Helm test hook, which Argo CD never runs.
+    testFramework:
+      enabled: false
+
+  vector:
+    resources:
+      requests: {cpu: 25m, memory: 128Mi}
+
+  # CVAT's database is cvat-database on RDS (infra/); values-<env>.yaml sets
+  # postgresql.external.host. The password comes only from the Secret, as
+  # CVAT_POSTGRES_PASSWORD: never also set CVAT_POSTGRES_PASSWORD_FILE, CVAT
+  # refuses to start with both.
+  postgresql:
+    enabled: false
+    secret:
+      create: false
+      # Synced by templates/database-user.external-secret.yaml.
+      name: cvat-database-user
