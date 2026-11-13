@@ -1,6 +1,5 @@
-# Locks where the office and Client VPN users reach CVAT, and which target
-# group Traefik's pods are bound to. How app_ingress routes the host and checks
-# the targets is tested in Femtum/Infrastructure.
+# Locks where the office and Client VPN users reach CVAT. deploy.sh gives this
+# host to the chart and to the Gateway's HTTPRoute.
 #
 # The AWS and TFE providers are mocked and the platform contract is overridden,
 # so the suite needs no credentials or Terraform Cloud access, creates nothing
@@ -28,14 +27,6 @@ override_module {
   }
 }
 
-override_resource {
-  target          = module.ingress.aws_lb_target_group.http
-  override_during = plan
-  values = {
-    arn = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
-  }
-}
-
 variables {
   environment_name = "rnd"
 }
@@ -45,15 +36,6 @@ run "given_the_rnd_platform_when_planned_then_cvat_answers_on_its_intranet_host_
 
   assert {
     condition     = output.url == "https://cvat.rnd.intranet.femtum.com"
-    error_message = "CVAT must answer on cvat.<intranet domain>, the host the office and the Client VPN already resolve to the shared ALB, over HTTPS."
-  }
-}
-
-run "given_the_ingress_when_planned_then_traefik_binds_to_the_target_group_the_host_rule_forwards_to" {
-  command = plan
-
-  assert {
-    condition     = output.target_group_arn == "arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
-    error_message = "The TargetGroupBinding must read the target group the host rule forwards to."
+    error_message = "CVAT must answer on cvat.<intranet domain>, the host the office and the Client VPN resolve to the platform's Gateway, over HTTPS."
   }
 }

@@ -16,8 +16,8 @@ cvat:
     # pod it runs in.
     permissionFix:
       enabled: false
-    # The ALB and then Traefik each append to X-Forwarded-For: with one hop,
-    # Django takes the ALB's address for every user's.
+    # The Gateway's ALB and then Traefik each append to X-Forwarded-For: with
+    # one hop, Django takes the ALB's address for every user's.
     numProxies: 2
     initializer:
       resources:
@@ -77,20 +77,20 @@ vector:
 traefik:
   resources:
     requests: {cpu: 50m, memory: 64Mi}
-  # Reached only through the shared ALB's target group, bound in
-  # target-group-binding.yaml. A LoadBalancer Service would get its own NLB.
+  # Reached only through the Gateway, routed in http-route.yaml. A
+  # LoadBalancer Service would get its own NLB.
   service:
     type: ClusterIP
   ports:
     web:
-      # The ALB's addresses, inside the platform VPC (10.0.0.0/16): without
+      # The Gateway ALB's addresses, inside the platform VPC (10.0.0.0/16): without
       # this, Traefik rewrites X-Forwarded-Proto to http and Django answers
       # HTTPS requests as plain HTTP.
       forwardedHeaders:
         trustedIPs:
           - 10.0.0.0/16
-  # The ALB health-checks each pod with its IP as host, which no CVAT route
-  # matches.
+  # The Gateway's ALB health-checks each pod with its IP as host, which no
+  # CVAT route matches.
   ingressRoute:
     healthcheck:
       enabled: true

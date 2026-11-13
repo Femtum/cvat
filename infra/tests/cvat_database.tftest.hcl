@@ -55,13 +55,6 @@ override_resource {
   }
 }
 
-override_resource {
-  target = module.ingress.aws_lb_target_group.http
-  values = {
-    arn = "arn:aws:elasticloadbalancing:ca-central-1:111122223333:targetgroup/cvat-http/0123456789abcdef"
-  }
-}
-
 variables {
   environment_name = "rnd"
 }
