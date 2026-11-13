@@ -33,13 +33,13 @@ CVAT's own RDS instance, separate from `lit-database`, so it is restored on its 
 
 ## CVAT's database user and secret
 
-CVAT connects as `cvat`, owner of the database `cvat`, with the credentials in the Secrets Manager secret `database_secret_name`, `k8s/cvat-rnd/database` (keys `username`, `database`, `password`, on the default `aws/secretsmanager` key). Both were made by hand: Terraform manages neither the user, nor the secret, nor its value, so the password never enters Terraform state. Grafana's admin, `grafana_admin_secret_name`, `k8s/cvat-rnd/grafana` (keys `username`, `password`), is made by hand the same way: nobody logs in with it (CVAT's chart disables Grafana's login form), but the chart would otherwise generate a new one on every Argo CD render.
+CVAT connects as `cvat`, owner of the database `cvat`, with the credentials in the Secrets Manager secret `database_secret_name`, `k8s/cvat-rnd/database` (keys `username`, `database`, `password`, on the default `aws/secretsmanager` key). Both were made by hand: Terraform manages neither the user, nor the secret, nor its value, so the password never enters Terraform state.
 
 Argo CD runs CVAT in the Kubernetes namespace `kubernetes_namespace`, `cvat-<environment>` (see [`deploy/`](../deploy/README.md)), and the platform's External Secrets store lets a namespace read the secrets under `k8s/<namespace>/` and nothing else: this root holds no IAM for it. The hand-run release in the namespace `cvat` read `k8s/cvat/database`, which stays until that release is gone (the migration runbook in `deploy/README.md`).
 
 ```sh
-terraform output -raw database_secret_name        # k8s/cvat-rnd/database
-terraform output -raw grafana_admin_secret_name   # k8s/cvat-rnd/grafana
+terraform output -raw kubernetes_namespace    # cvat-rnd
+terraform output -raw database_secret_name    # k8s/cvat-rnd/database
 ```
 
 ## Terraform Cloud workspace

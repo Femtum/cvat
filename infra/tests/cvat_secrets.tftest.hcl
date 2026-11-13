@@ -61,19 +61,6 @@ run "given_the_rnd_environment_when_planned_then_the_database_user_is_read_from_
   }
 }
 
-run "given_the_rnd_environment_when_planned_then_grafana_s_admin_is_read_from_k8s_cvat_rnd_grafana" {
-  command = plan
-
-  variables {
-    environment_name = "rnd"
-  }
-
-  assert {
-    condition     = output.grafana_admin_secret_name == "k8s/cvat-rnd/grafana"
-    error_message = "An ExternalSecret in cvat-rnd can only read k8s/cvat-rnd/*."
-  }
-}
-
 run "given_the_dev_environment_when_planned_then_its_secrets_live_under_k8s_cvat_dev" {
   command = plan
 
