@@ -1,0 +1,16 @@
+# The Gateway's default target group checks /, which Traefik answers with 404
+# for a host-less request: /ping is the route the chart's healthcheck
+# IngressRoute answers on any host. Naming a Service replaces the platform's
+# default configuration, so it repeats its pod targets.
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: cvat-traefik
+  namespace: cvat
+spec:
+  targetReference:
+    name: cvat-traefik
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: /ping

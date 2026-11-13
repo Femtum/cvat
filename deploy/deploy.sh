@@ -4,8 +4,9 @@
 set -euo pipefail
 
 # backend-data.pv.yaml reserves its volume for cvat/cvat-backend-data, and
-# namespace.yaml, database-user.external-secret.yaml and
-# target-group-binding.yaml live in namespace cvat: all follow this release.
+# namespace.yaml, database-user.external-secret.yaml, target-group-binding.yaml,
+# traefik.target-group-configuration.yaml and http-route.yaml live in
+# namespace cvat: all follow this release.
 readonly release=cvat
 readonly namespace=cvat
 readonly cluster=femtum-rnd
@@ -70,6 +71,8 @@ main() {
     --set-string "postgresql.external.host=$database_address" \
     --wait --wait-for-jobs --timeout 15m
   apply_manifest target-group-binding.yaml TARGET_GROUP_ARN "$target_group_arn"
+  kubectl apply -f "$repo_root/deploy/traefik.target-group-configuration.yaml"
+  apply_manifest http-route.yaml HOSTNAME "${url#https://}"
 }
 
 main "$@"

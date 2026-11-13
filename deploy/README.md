@@ -1,6 +1,6 @@
 # Deploying CVAT on Kubernetes
 
-How CVAT runs on the platform's `femtum-rnd` cluster: upstream's chart (`helm-chart/`, unmodified), Femtum's values on top of it, the static volume that binds the backend's shared data to `cvat_data`, the EFS file system and the `cvat-database` RDS instance in [`infra/`](../infra/README.md), the External Secrets objects that bring the database user in from Secrets Manager, and the binding that puts Traefik behind the platform's shared ALB at `https://cvat.rnd.intranet.femtum.com`.
+How CVAT runs on the platform's `femtum-rnd` cluster: upstream's chart (`helm-chart/`, unmodified), Femtum's values on top of it, the static volume that binds the backend's shared data to `cvat_data`, the EFS file system and the `cvat-database` RDS instance in [`infra/`](../infra/README.md), the External Secrets objects that bring the database user in from Secrets Manager, and the binding and route that put Traefik behind the platform's shared ALB and its Gateway at `https://cvat.rnd.intranet.femtum.com`.
 
 Run everything over the Client VPN, as `AdministratorAccess`, once `infra/` is applied, the cluster has its default StorageClass and External Secrets Operator (see the platform's [`kubernetes/README.md`](https://github.com/Femtum/Infrastructure/blob/main/infrastructure-aws/kubernetes/README.md), "Storage" and "Secrets from Secrets Manager"), and the database user and its secret exist (see `infra/README.md`). The release is `cvat` in namespace `cvat`: the PersistentVolume is reserved for the claim `cvat/cvat-backend-data`, which the chart names `<release>-backend-data`.
 
@@ -51,6 +51,16 @@ aws elbv2 describe-target-health --target-group-arn "$target_group_arn" \
   --query 'TargetHealthDescriptions[].TargetHealth.State'    # healthy
 curl -sI https://cvat.rnd.intranet.femtum.com | head -1      # HTTP/2 200
 ```
+
+The same host is also on the platform Gateway (`platform-gateway/platform`, listener `https`): `deploy/http-route.yaml` routes it to Traefik, and `deploy/traefik.target-group-configuration.yaml` health-checks Traefik's pods on `/ping`, which the chart's healthcheck `IngressRoute` answers on any host. DNS reaches the Gateway from the platform's cutover on; until then, pin the host to it:
+
+```sh
+kubectl get httproute -n cvat cvat -o jsonpath='{range .status.parents[0].conditions[*]}{.type}={.status} {end}{"\n"}'   # Accepted=True ResolvedRefs=True
+curl -sI --resolve cvat.rnd.intranet.femtum.com:443:10.0.100.48 \
+  https://cvat.rnd.intranet.femtum.com | head -1             # HTTP/2 200
+```
+
+After the cutover, the binding and `infra/`'s target group go with the old shared ALB.
 
 ## What survives what
 
