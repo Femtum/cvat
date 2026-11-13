@@ -1,0 +1,6 @@
+dependencies:
+- name: cvat
+  repository: file://../../helm-chart
+  version: 2.82.0
+digest: sha256:791e2cb193d7ce3e7d3bb4640ce90917a5d6cce8d5a3447df05e49ed00e892d8
+generated: "2026-11-13T15:46:27.215417-05:00"

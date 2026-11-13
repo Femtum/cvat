@@ -1,0 +1,25 @@
+# cvat_data, shared by the server and every worker, which mount it by this
+# name (values.yaml, additionalVolumes). The PersistentVolume is
+# cluster-scoped, which apps may not create: a cluster admin applies
+# deploy/cluster/backend-data.pv.yaml, reserved for this claim
+# (deploy/README.md). Argo CD never deletes the claim, so the volume is never
+# released behind the users' back. Wave -1: until the volume is reserved for
+# it, the claim stays Pending and the sync starts nothing that writes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cvat-backend-data
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteMany
+  # The static volume's class; no StorageClass of that name exists, so
+  # nothing can provision another volume for the claim.
+  storageClassName: cvat-efs
+  volumeName: cvat-backend-data
+  resources:
+    requests:
+      storage: 1Ti

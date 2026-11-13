@@ -1,0 +1,15 @@
+# Registers Traefik's pods into infra/'s target group on the shared ALB, which
+# office and Client VPN DNS still reach CVAT through until the platform's
+# cutover; removed in its cleanup. multiClusterTargetGroup lets the hand-run
+# release's binding in namespace cvat share the group during the migration.
+apiVersion: eks.amazonaws.com/v1
+kind: TargetGroupBinding
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  serviceRef:
+    name: {{ .Release.Name }}-traefik
+    port: web
+  targetGroupARN: {{ required "targetGroupBinding.targetGroupARN is required: infra/'s target_group_arn" .Values.targetGroupBinding.targetGroupARN }}
+  targetType: ip
+  multiClusterTargetGroup: true
