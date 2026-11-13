@@ -16,7 +16,8 @@ targetGroupBinding:
   targetGroupARN: ""
 
 cvat:
-  # Upstream's helm-chart/cvat.values.yaml, which deploy.sh used to pass first.
+  # Copied from upstream's helm-chart/cvat.values.yaml: the ApplicationSet
+  # passes one values file, values-<env>.yaml.
   analytics:
     enabled: true
   traefik:

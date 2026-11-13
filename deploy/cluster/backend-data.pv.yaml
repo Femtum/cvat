@@ -1,3 +1,7 @@
+# cvat_data's static volume. Cluster-scoped, so Argo CD's project apps may not
+# create it: a cluster admin applies it once, over the Client VPN
+# (deploy/README.md). volumeHandle is infra/'s backend_data_volume_handle.
+# The volume is reserved for the chart's claim in Argo CD's namespace.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -12,10 +16,12 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: cvat-efs
   claimRef:
-    namespace: cvat
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    namespace: cvat-rnd
     name: cvat-backend-data
   csi:
     driver: efs.csi.aws.com
-    volumeHandle: VOLUME_HANDLE
+    volumeHandle: fs-0d0fe580cb106a236::fsap-0160840e460cf5637
     volumeAttributes:
       encryptInTransit: "true"
